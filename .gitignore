@@ -1,0 +1,11 @@
+logs/
+figures/
+check_dataset_2/
+check_dataset/
+results/
+test/
+visualize/
+wandb/
+masking_visualizations/
+__pycache__/
+models/__pycache__/

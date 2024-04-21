@@ -1,0 +1,3 @@
+[submodule "MinkowskiEngine"]
+	path = MinkowskiEngine
+	url = https://github.com/shwoo93/MinkowskiEngine.git
