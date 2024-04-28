@@ -204,7 +204,7 @@ def get_args_parser():
 
 def main(args):
     # utils.init_distributed_mode(args)
-    args.distributed = False
+    args.distributed = False # we just disable distributed training for now, enable it by commenting this line, and uncommenting the line above
     
     print(args)
     device = torch.device(args.device)
