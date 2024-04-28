@@ -3,9 +3,7 @@ For all pre-training, we maintain an effective batch size of 4096. This is to en
 
 ## Pretraining
 
-**Hyperparameters:**
-
-Most hyperparameters are similar to the ones in ConvNeXt V2 repo, but here are some additional ones added. 
+**Hyperparameters:** Most hyperparameters are similar to the ones in ConvNeXt V2 repo, but here are some additional ones added. 
 
 ```sh
 --loss_aggr # loss aggregation strategy to account for multiple losses for each modality. We have implemented the uncertainty method (as explained by Kendall et al.) or the unweighted method (equal weighting of all losses). 
@@ -13,11 +11,10 @@ Most hyperparameters are similar to the ones in ConvNeXt V2 repo, but here are s
 --use_orig_stem # uses the original stem as in ConvNeXt V2, or a modified version of the stem. For our experiments we use the modified stem.
 ```
 
-**Modalities:**
-All modalities required for training must be modified in the `MODALITIES.py` file. The comments in that file will provide some more instructions on what to change.
+**Modalities:** All modalities required for training must be modified in the `MODALITIES.py` file. The comments in that file will provide some more instructions on what to change.
 
 
-Pretraining an atto model using 8 gpus:
+**Pretraining an atto model using 8 gpus**:
 ```sh
 python  -m torch.distributed.launch --nproc_per_node=8 main_pretrain.py \
         --model convnextv2_atto \
@@ -44,9 +41,7 @@ python  -m torch.distributed.launch --nproc_per_node=8 main_pretrain.py \
 
 
 ## Finetuning
-**Hyperparameters:**
-
-Most hyperparameters are similar to the ones in ConvNeXt V2 repo, but here are some additional ones added. 
+**Hyperparameters:** Most hyperparameters are similar to the ones in ConvNeXt V2 repo, but here are some additional ones added. 
 
 ```sh
 
@@ -56,10 +51,9 @@ Most hyperparameters are similar to the ones in ConvNeXt V2 repo, but here are s
 --input_size # ensure this is also the same as what was used for the pretrained model. NOTE: This is not the image size of the finetuning dataset.  
 ```
 
-**Bands:**
-We have enabled finetuning on GEO-Bench datasets (bigearthnet, so2sat, eurosat, cashew-plantation, SA-crop-type, brick-kiln). The datasets are named like `geobench.m-bigearthnet` for example. Modify `BAND_NAMES.json`, to change the bands that need to be used for these datasets. You can either use 3 bands (RGB) or all 12 bands. (eg. In the case of so2sat, the dataset doesnt consist of 12 bands, hence we replace the missing bands with ones containing similar wavelength (B1 -> B2, B9 -> B8A)).
+**Bands:** We have enabled finetuning on GEO-Bench datasets (bigearthnet, so2sat, eurosat, cashew-plantation, SA-crop-type, brick-kiln). The datasets are named like `geobench.m-bigearthnet` for example. Modify `BAND_NAMES.json`, to change the bands that need to be used for these datasets. You can either use 3 bands (RGB) or all 12 bands. (eg. In the case of so2sat, the dataset doesnt consist of 12 bands, hence we replace the missing bands with ones containing similar wavelength (B1 -> B2, B9 -> B8A)).
 
-Finetuning on GEO-Bench on a single gpu:
+**Finetuning on GEO-Bench on a single gpu:**
 ```sh
 python -m  main_finetune \
             --model convnextv2_atto \
