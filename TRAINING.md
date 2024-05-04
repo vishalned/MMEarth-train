@@ -3,7 +3,7 @@ For all pre-training, we maintain an effective batch size of 4096. This is to en
 
 ## Pretraining
 
-**Hyperparameters:** Most hyperparameters are similar to the ones in ConvNeXt V2 repo, but here are some additional ones added. 
+**Arguments:** Most arguments are similar to the ones in ConvNeXt V2 repo, but here are some additional ones added. 
 
 ```sh
 --loss_aggr # loss aggregation strategy to account for multiple losses for each modality. We have implemented the uncertainty method (as explained by Kendall et al.) or the unweighted method (equal weighting of all losses). 
@@ -41,7 +41,7 @@ python  -m torch.distributed.launch --nproc_per_node=8 main_pretrain.py \
 
 
 ## Finetuning
-**Hyperparameters:** Most hyperparameters are similar to the ones in ConvNeXt V2 repo, but here are some additional ones added. 
+**Arguments:** Most arguments are similar to the ones in ConvNeXt V2 repo, but here are some additional ones added. 
 
 ```sh
 
@@ -83,3 +83,12 @@ python -m  main_finetune \
             --save_ckpt False \
             --num_samples None
 ```
+
+**Note:** In the case of the segmentations datasets (cashew-plantation and SA-crop-type), you need to change the model and smoothing argument as follows:
+```sh
+--model convnextv2_unet_atto \
+--smoothing 0 \ # ensure smoothing is 0.
+```
+
+## Slurm Scripts
+For all our training, we use slurm, and have the scripts [here](https://github.com/vishalned/MMEarth-train/tree/main/slurm_scripts). Comments inside the slurm scripts will give you better insights on what each script was used for. 

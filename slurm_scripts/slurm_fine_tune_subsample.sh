@@ -13,6 +13,12 @@
 #SBATCH --array=1-9
 
 
+#############################################################################################################
+# slurm script for finetuning on all classification datasets with one pretraining model, and choosing a 
+# subset of the training data
+#############################################################################################################
+
+
 
 datasets=("geobench.m-bigearthnet" "geobench.m-so2sat" "geobench.m-eurosat")
 linear_probe=True

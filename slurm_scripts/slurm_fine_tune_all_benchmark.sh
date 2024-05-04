@@ -8,6 +8,10 @@
 #SBATCH --mem=64G
 #SBATCH --array=1-4  # Set the array size according to the number of jobs you want to run (4 datasets * 2 tasks = 8 jobs)
 
+############################################################################################################
+# slurm scripts for fine-tuning on all other SOTA benchmarking models
+############################################################################################################
+
 
 pretraining=gassl-resnet50
 datasets=("geobench.m-bigearthnet" "geobench.m-so2sat")

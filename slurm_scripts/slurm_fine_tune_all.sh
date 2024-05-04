@@ -8,9 +8,13 @@
 #SBATCH --mem=32G
 #SBATCH --array=1  # Set the array size according to the number of jobs you want to run (4 datasets * 2 tasks = 8 jobs)
 
+############################################################################################################
+# slurm script for finetuning on all geobench datasets with one pretraining model
+############################################################################################################
+
 
 pretraining=s2_12-patch16-ip112-newstem
-datasets=("geobench.m-so2sat")
+datasets=("geobench.m-so2sat" "geobench.m-bigearthnet")
 linear_probe=True
 output_dir_base="/projects/dereeco/data/global-lr/ConvNeXt-V2/results"
 log_dir_base="/projects/dereeco/data/global-lr/ConvNeXt-V2/logs"

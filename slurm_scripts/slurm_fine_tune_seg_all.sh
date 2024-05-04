@@ -12,6 +12,12 @@
 #SBATCH --array=1-2  # Set the array size according to the number of jobs you want to run (2 datasets, 2 tasks each)
 
 
+#############################################################################################################
+# slurm script for finetuning on all segmentation datasets with one pretraining model
+# we ensure the smoothing argument is 0. 
+# we also ensure that the model has an additional "unet" word in the model name
+#############################################################################################################
+
 
 datasets=("geobench.m-cashew-plantation" "geobench.m-SA-crop-type")
 pretraining="pt-all_mod_uncertainty"

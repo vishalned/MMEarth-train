@@ -16,6 +16,12 @@
 ##export SCRATCH=$SCRATCH/$SLURM_ARRAY_TASK_ID
 ##mkdir -p $SCRATCH
 
+
+#############################################################################################################
+# slurm script for finetuning on all classification datasets with one pretraining model on a v100 for the tiny model
+#############################################################################################################
+
+
 cleanup() {
     rm -rf $SCRATCH/*
     exit 0

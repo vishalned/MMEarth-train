@@ -11,6 +11,9 @@
 #SBATCH --mem=64G 
 
 
+#############################################################################################################
+# slurm script for pretraining the MP-MAE 
+#############################################################################################################
 
 python  -m torch.distributed.launch --nproc_per_node=2 main_pretrain.py \
         --model convnextv2_pico \
