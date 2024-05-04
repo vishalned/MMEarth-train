@@ -1,4 +1,6 @@
 # Multi Pretext Masked Autoencoder (MP-MAE)
+![model-grey](https://github.com/vishalned/MMEarth-train/assets/27778126/b4461d84-0f42-4489-acec-77834335be94)
+
 
 [![Project Website](https://img.shields.io/badge/Project%20Website-8A2BE2)](https://vishalned.github.io/mmearth)
 [![Paper](https://img.shields.io/badge/arXiv-xxxx.xxxxx-blue)](https://arxiv.org/abs/xxxx.xxxxx)
@@ -20,17 +22,13 @@ This repository borrows from the [ConvNeXt V2](https://github.com/facebookresear
 ## Citation
 Please cite our paper if you use this code or any of the provided data.
 
-<!--- # Lang, N., Jetz, W., Schindler, K., & Wegner, J. D. (2023). A high-resolution canopy height model of the Earth. Nature Ecology & Evolution, 1-12.
+Vishal Nedungadi, Ankit Kariryaa, Stefan Oehmcke, Serge Belongie, Christian Igel, & Nico Lang (2024). MMEarth: Exploring Multi-Modal Pretext Tasks For Geospatial Representation Learning.
 ```
-@article{lang2023high,
-  title={A high-resolution canopy height model of the Earth},
-  author={Lang, Nico and Jetz, Walter and Schindler, Konrad and Wegner, Jan Dirk},
-  journal={Nature Ecology \& Evolution},
-  pages={1--12},
-  year={2023},
-  publisher={Nature Publishing Group UK London}
+  @article{mmearth2024,
+    title={{MMEarth: Exploring Multi-Modal Pretext Tasks For Geospatial Representation Learning}},
+    author={Vishal Nedungadi and Ankit Kariryaa and Stefan Oehmcke and Serge Belongie and Christian Igel and Nico Lang},
+    year={2024},
 }
 ```
--->
 
 
