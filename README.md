@@ -1,4 +1,4 @@
-### Multi Pretext Masked Autoencoder (MP-MAE)
+# Multi Pretext Masked Autoencoder (MP-MAE)
 
 [![Project Website](https://img.shields.io/badge/Project%20Website-8A2BE2)](https://vishalned.github.io/mmearth)
 [![Paper](https://img.shields.io/badge/arXiv-xxxx.xxxxx-blue)](https://arxiv.org/abs/xxxx.xxxxx)
