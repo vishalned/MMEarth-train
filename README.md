@@ -17,7 +17,7 @@ See [INSTALL.md](https://github.com/vishalned/MMEarth-train/blob/main/INSTALL.md
 See [TRAINING.md](https://github.com/vishalned/MMEarth-train/blob/main/TRAINING.md) for more details on training and finetuning. 
 
 ## Model Checkpoints
-All the pretraining weights can be downloaded from [here](https://sid.erda.dk/sharelink/ECYWkytzcG). The folders are named in the following format. Inside the folder you will find a checkpoint `.pth` weight file. 
+All the pretraining weights can be downloaded from [here](https://sid.erda.dk/sharelink/ECYWkytzcG). The folders are named in the following format. Inside the folder you will find a checkpoint `.pth` weight file. An example to load the weights is in the [examples](https://github.com/vishalned/MMEarth-train/tree/main/examples) folder.
 
 ```sh
 pt-all_mod_$MODEL_$DATA_$IMGSIZE_$LOSS/
@@ -26,7 +26,10 @@ $MODEL: atto or tiny
 $DATA: 100k or 1M
 $IMGSIZE: 128 or 64
 $LOSS: uncertainty or unweighted # This is the loss weighting strategy. Most experiments in the paper were run using the uncertainty method. 
+# note that while the img size is 128 or 64, during pretraining we use a random crop to make the image sizes 112 and 56 respectively. 
 ```
+
+
 
 ## Acknowledgment
 This repository borrows from the [ConvNeXt V2](https://github.com/facebookresearch/ConvNeXt-V2/tree/main) repository.
