@@ -1,5 +1,6 @@
 # Multi Pretext Masked Autoencoder (MP-MAE)
-![model-grey](https://github.com/vishalned/MMEarth-train/assets/27778126/b4461d84-0f42-4489-acec-77834335be94)
+
+
 
 
 [![Project Website](https://img.shields.io/badge/Project%20Website-8A2BE2)](https://vishalned.github.io/mmearth)
@@ -8,6 +9,7 @@
 
 This repository contains code used to create the models and results presented in this paper [MMEarth: Exploring Multi-Modal Pretext Tasks For Geospatial Representation Learning](). It modifies the [ConvNext V2](https://arxiv.org/abs/2301.00808) architecture to be used with [MMEarth](https://github.com/vishalned/MMEarth-data), which is a multi-modal geospatial remote sensing data. 
 
+![model-grey](https://github.com/vishalned/MMEarth-train/assets/27778126/d7defca4-f603-4f00-af7d-f18e4fb3be84)
 
 ## Installation
 See [INSTALL.md](https://github.com/vishalned/MMEarth-train/blob/main/INSTALL.md) for more instructions on the installation of dependencies
