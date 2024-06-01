@@ -18,9 +18,9 @@ from timm.data import Mixup
 from timm.utils import accuracy, ModelEma
 
 import utils
-from utils import adjust_learning_rate
+from utils import adjust_learning_rate, visualize_segmentation
 from timm.loss import LabelSmoothingCrossEntropy
-from custom_func_finetune import DiceLoss, visualize_segmentation
+from custom_loss import DiceLoss
 
 
 def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
