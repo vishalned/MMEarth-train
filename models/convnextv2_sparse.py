@@ -10,12 +10,12 @@ import torch
 import torch.nn as nn
 from timm.models.layers import trunc_normal_
 
-from .utils import (
-    LayerNorm,
+from .utils_sparse import (
     MinkowskiLayerNorm,
     MinkowskiGRN,
     MinkowskiDropPath
 )
+from .utils import LayerNorm
 from MinkowskiEngine import (
     MinkowskiConvolution,
     MinkowskiDepthwiseConvolution,
