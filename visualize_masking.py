@@ -478,7 +478,7 @@ def prepare_model(checkpoint_dir, args):
 if __name__ == '__main__':
     import json
     import h5py
-    from custom_dataset import multimodal_dataset
+    from custom_dataset import MultiModalDataset
 
     idxs = [445583, 1110227, 1041332, 20296]
     s2_type = ['l2a', 'l2a', 'l1c', 'l2a']
@@ -493,7 +493,7 @@ if __name__ == '__main__':
     model = prepare_model(checkpoint_dir, args)
 
     print('Creating dataset loader')
-    dataset = multimodal_dataset(args, split="train")
+    dataset = MultiModalDataset(args, split="train")
 
     print('Loading data')
     data_dict = dataset.__getitem__(idxs[img_id])

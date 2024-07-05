@@ -8,34 +8,25 @@
 
 import argparse
 import datetime
-import numpy as np
-import time
 import json
 import os
-import uuid
+import time
 from pathlib import Path
 
-
-import torch
-import torch.nn as nn
-import torch.backends.cudnn as cudnn
-import torchvision.transforms as transforms
-import torchvision.datasets as datasets
-
-import timm
-# assert timm.__version__ == "0.3.2"  # version check
+import numpy as np
 import timm.optim.optim_factory as optim_factory
+import torch
+import torch.backends.cudnn as cudnn
+import wandb
 
-from engine_pretrain import train_one_epoch
-from custom_dataset import build_pretraining_dataset
-from custom_loss import UncertaintyWeightingStrategy
 import models.fcmae as fcmae
-
 import utils
+from MODALITIES import *
+from custom_loss import UncertaintyWeightingStrategy
+from engine_pretrain import train_one_epoch
+from mmearth_dataset import get_mmearth_dataloaders
 from utils import NativeScalerWithGradNormCount as NativeScaler
 from utils import str2bool
-from MODALITIES import *
-import wandb
 
 
 def get_args_parser():
@@ -46,9 +37,6 @@ def get_args_parser():
     parser.add_argument('--wandb_project', type=str, default='global-lr')
     parser.add_argument('--wandb_run_name', type=str)
 
-
-
-
     parser.add_argument('--batch_size', default=64, type=int,
                         help='Per GPU batch size')
     parser.add_argument('--epochs', default=800, type=int)
@@ -56,16 +44,13 @@ def get_args_parser():
                         help='epochs to warmup LR')
     parser.add_argument('--update_freq', default=1, type=int,
                         help='gradient accumulation step')
-    
-    
 
     # loss parameters
-    parser.add_argument('--loss_aggr', choices=['uncertainty', 'unweighted'], default='uncertainty', 
+    parser.add_argument('--loss_aggr', choices=['uncertainty', 'unweighted'], default='uncertainty',
                         help='loss aggregation method')
-    parser.add_argument('--loss_full', type=str2bool, default='False', 
-                        help='compute loss on all pixels or only on masked pixels') # true means compute loss on all pixels
-    
-    
+    parser.add_argument('--loss_full', type=str2bool, default='False',
+                        help='compute loss on all pixels or only on masked pixels')  # true means compute loss on all pixels
+
     # Model parameters
     parser.add_argument('--model', default='convnextv2_pico', type=str, metavar='MODEL',
                         help='Name of model to train')
@@ -79,7 +64,7 @@ def get_args_parser():
     parser.add_argument('--decoder_embed_dim', type=int, default=512)
     parser.add_argument('--patch_size', type=int, default=16)
     parser.add_argument('--use_orig_stem', type=str2bool, default=False)
-    
+
     # Optimizer parameters
     parser.add_argument('--weight_decay', type=float, default=0.05,
                         help='weight decay (default: 0.05)')
@@ -89,12 +74,15 @@ def get_args_parser():
                         help='base learning rate: absolute_lr = base_lr * total_batch_size / 256')
     parser.add_argument('--min_lr', type=float, default=0., metavar='LR',
                         help='lower lr bound for cyclic schedulers that hit 0')
-    
-    # Dataset parameters
-    parser.add_argument('--data_path', default='/projects/dereeco/data/global-lr/data_1M_130_new/data_1M_130_new.h5', type=str,
-                        help='path to the h5 file')
-    parser.add_argument('--random_crop', type=str2bool, default=True)
 
+    # Dataset parameters
+    parser.add_argument('--data_dir', default=MMEARTH_DIR,
+                        type=str,
+                        help='path to the dataset')
+    parser.add_argument('--processed_dir', default=None,
+                        type=str,
+                        help='path to the processed dataset (beton file)')
+    parser.add_argument('--random_crop', type=str2bool, default=True)
     parser.add_argument('--output_dir', default='',
                         help='path where to save, empty for no saving')
     parser.add_argument('--log_dir', default=None,
@@ -113,9 +101,7 @@ def get_args_parser():
     parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
                         help='start epoch')
     parser.add_argument('--num_workers', default=10, type=int)
-    parser.add_argument('--pin_mem', type=str2bool, default=True,
-                        help='Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.')
-    
+
     # Evaluation parameters
     parser.add_argument('--crop_pct', type=float, default=None)
 
@@ -126,13 +112,11 @@ def get_args_parser():
     parser.add_argument('--dist_on_itp', type=str2bool, default=False)
     parser.add_argument('--dist_url', default='env://',
                         help='url used to set up distributed training')
-    
+
     return parser
 
 
-
 def main(args):
-
     utils.init_distributed_mode(args)
     # args.distributed = False
     print(args)
@@ -165,13 +149,12 @@ def main(args):
         args.band_stats = json.load(open(args.band_stats_path, 'r'))
         args.tile_info = json.load(open(args.tile_info_path, 'r'))
 
-    
     #################################################################################################
 
     if args.wandb and args.local_rank == 0:
         print("Logging to wandb")
         config = {
-            'model': args.model ,
+            'model': args.model,
             'mask_ratio': args.mask_ratio,
             'norm_pix_loss': args.norm_pix_loss,
             'loss_type': args.loss_type,
@@ -184,10 +167,9 @@ def main(args):
             'update_freq': args.update_freq,
             'use_orig_stem': args.use_orig_stem
         }
-    
+
         wandb.init(project=args.wandb_project, config=config)
         wandb.run.name = args.wandb_run_name
-
 
     device = torch.device(args.device)
 
@@ -195,21 +177,22 @@ def main(args):
     seed = args.seed + utils.get_rank()
     torch.manual_seed(seed)
     np.random.seed(seed)
-    
+
     cudnn.benchmark = True
-    
 
     # custom multimodal dataset
-    dataset_train = build_pretraining_dataset(is_train=True, args=args)
-
+    train_dataloader = get_mmearth_dataloaders(
+        args.data_path,
+        args.processed_dir,
+        args.modalities,
+        num_workers=args.num_workers,
+        batch_size_per_device=args.batch_size,
+        distributed=args.distributed,
+    )[0]
+    len_dataset = train_dataloader.first_traversal_order
 
     num_tasks = utils.get_world_size()
     global_rank = utils.get_rank()
-
-    sampler_train = torch.utils.data.DistributedSampler(
-        dataset_train, num_replicas=num_tasks, rank=global_rank, shuffle=True, seed=args.seed,
-    )
-    print("Sampler_train = %s" % str(sampler_train))
 
     if global_rank == 0 and args.log_dir is not None:
         os.makedirs(args.log_dir, exist_ok=True)
@@ -218,25 +201,8 @@ def main(args):
     else:
         log_writer = None
 
-    
-    def collate_fn(batch):
-        # for each batch append the samples of the same modality together and return the ids. We keep track of the ids to differentiate between sentinel2_l1c and sentinel2_l2a
-        return_batch = {}
-        ids = [b['id'] for b in batch]
-        return_batch = {modality: torch.stack([b[modality] for b in batch], dim=0) for modality in args.modalities.keys()}
-        return ids, return_batch
-
-    data_loader_train = torch.utils.data.DataLoader(
-        dataset_train, sampler=sampler_train,
-        batch_size=args.batch_size,
-        num_workers=args.num_workers,
-        pin_memory=args.pin_mem,
-        drop_last=True,
-        collate_fn=collate_fn if not args.IMNET else None,
-    )
-
     if args.loss_aggr == 'uncertainty':
-        num_tasks = len(args.out_modalities) # in this case we have one uncertainty value per modality
+        num_tasks = len(args.out_modalities)  # in this case we have one uncertainty value per modalities
         loss_fn = UncertaintyWeightingStrategy(num_tasks)
     else:
         loss_fn = None
@@ -263,11 +229,11 @@ def main(args):
     print('number of params in encoder:', n_parameters_encoder)
 
     eff_batch_size = args.batch_size * args.update_freq * utils.get_world_size()
-    num_training_steps_per_epoch = len(dataset_train) // eff_batch_size
+    num_training_steps_per_epoch = len_dataset // eff_batch_size
 
     if args.lr is None:
         args.lr = args.blr * eff_batch_size / 256
-        
+
     print("base lr: %.2e" % (args.lr * 256 / eff_batch_size))
     print("actual lr: %.2e" % args.lr)
 
@@ -278,8 +244,6 @@ def main(args):
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=False)
         model_without_ddp = model.module
 
-
-
     param_groups = optim_factory.add_weight_decay(model_without_ddp, args.weight_decay)
     optimizer = torch.optim.AdamW(param_groups, lr=args.lr, betas=(0.9, 0.95))
     print(optimizer)
@@ -289,34 +253,31 @@ def main(args):
         args=args, model=model, model_without_ddp=model_without_ddp,
         optimizer=optimizer, loss_scaler=loss_scaler)
 
-
-######## Training loop ########
+    ######## Training loop ########
     print(f"Start training for {args.epochs} epochs")
     start_time = time.time()
-    best_loss = 100000
     for epoch in range(args.start_epoch, args.epochs):
-        if args.distributed:
-            data_loader_train.sampler.set_epoch(epoch)
+        # not needed for ffcv? we do not recompile
+        # if args.distributed:
+        #     train_dataloader.sampler.set_epoch(epoch)
         if log_writer is not None:
             log_writer.set_step(epoch * num_training_steps_per_epoch * args.update_freq)
         train_stats, loss_dict, log_var_list, normalized_loss_list = train_one_epoch(
-            model, data_loader_train,
+            model, train_dataloader,
             optimizer, device, epoch, loss_scaler,
             log_writer=log_writer,
             args=args
         )
         if args.output_dir and args.save_ckpt:
-            if (epoch+1) % args.save_ckpt_freq == 0 or epoch + 1 == args.epochs:
+            if (epoch + 1) % args.save_ckpt_freq == 0 or epoch + 1 == args.epochs:
                 utils.save_model(
                     args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
                     loss_scaler=loss_scaler, epoch=epoch)
-                
 
         log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
-                        'epoch': epoch,
-                        'n_parameters': n_parameters}
+                     'epoch': epoch,
+                     'n_parameters': n_parameters}
 
-    
         if args.wandb and utils.is_main_process():
             # we also log multiple loss values and log_var values if its not None
             loss_dict_keys = []
@@ -339,11 +300,11 @@ def main(args):
     print('Training time {}'.format(total_time_str))
     wandb.finish()
 
+
 if __name__ == '__main__':
     args = get_args_parser()
     args = args.parse_args()
     if args.output_dir:
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)
-
 
     main(args)

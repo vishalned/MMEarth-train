@@ -42,9 +42,9 @@ def train_one_epoch(model: torch.nn.Module,
                     samples[key] = samples[key].to(device, non_blocking=True)
 
         loss, pred, mask, loss_dict_, log_var_list_, normalized_loss_list_ = model(samples, mask_ratio=args.mask_ratio)
-        # loss_dict_ is a dictionary containing the loss values for each modality
-        # log_var_list_ is a list containing the log variance for each modality - used in uncertainty weighting
-        # normalized_loss_list_ is a list containing the normalized loss for each modality - used in uncertainty weighting
+        # loss_dict_ is a dictionary containing the loss values for each modalities
+        # log_var_list_ is a list containing the log variance for each modalities - used in uncertainty weighting
+        # normalized_loss_list_ is a list containing the normalized loss for each modalities - used in uncertainty weighting
 
 
         log_var_list = log_var_list_
