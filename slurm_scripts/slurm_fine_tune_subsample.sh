@@ -33,7 +33,7 @@ partitions=("0.01x_train" "0.05x_train" "0.50x_train") # for bigearthnet this co
 dataset_idx=$(( (SLURM_ARRAY_TASK_ID - 1) / 3))
 idx=$(( (SLURM_ARRAY_TASK_ID - 1) % 3 ))
 dataset=${datasets[$dataset_idx]}
-num_samples=${samples[$idx]}
+partition=${partitions[$idx]}
 # percent=0.05
 blr=2e-4
 
@@ -69,7 +69,7 @@ python -m  main_finetune \
             --use_orig_stem True \
             --run_on_test True \
             --save_ckpt True \
-            --num_samples $num_samples \
+            --partition $partition \
             # --percent $percent
 
 
