@@ -166,6 +166,8 @@ def main(args):
         helpers.init_distributed_mode(args)
     print(args)
 
+    args.data_dir = Path(args.data_dir)
+
     ############# creating some additional args variables to be used by other functions #############
     args.inp_modalities = INP_MODALITIES
     args.out_modalities = OUT_MODALITIES
