@@ -156,13 +156,14 @@ def get_args_parser():
     parser.add_argument("--use_mixed", type=str2bool, default=False)
     parser.add_argument("--sparse", type=str2bool, default=True)
     parser.add_argument("--debug", type=str2bool, default=False)
+    parser.add_argument("--distributed", type=str2bool, default=False)
 
     return parser
 
 
 def main(args):
-    helpers.init_distributed_mode(args)
-    # args.distributed = False
+    if args.distributed:
+        helpers.init_distributed_mode(args)
     print(args)
 
     ############# creating some additional args variables to be used by other functions #############
@@ -244,7 +245,7 @@ def main(args):
         img_size=args.input_size,
         args=args,
         loss_fn=loss_fn,
-        sparse=args.sparse
+        sparse=args.sparse,
     )
     model.to(device)
 
