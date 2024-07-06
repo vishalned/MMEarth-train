@@ -14,7 +14,7 @@
 #############################################################################################################
 # slurm script for pretraining the MP-MAE 
 #############################################################################################################
-
+params = ${1:-}
 python  python --nproc_per_node=2 main_pretrain.py \
         --model convnextv2_pico \
         --batch_size 256 \
@@ -34,5 +34,5 @@ python  python --nproc_per_node=2 main_pretrain.py \
         --patch_size 16 \
         --input_size 112 \
         --use_orig_stem False \
-        --save_ckpt True
+        --save_ckpt True $params
 
