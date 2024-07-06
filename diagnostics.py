@@ -1,7 +1,7 @@
-import sys
 import os
 import platform
 import subprocess
+import sys
 
 
 def parse_nvidia_smi():

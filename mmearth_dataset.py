@@ -1,5 +1,4 @@
 import json
-import warnings
 from argparse import Namespace
 from collections import OrderedDict
 from pathlib import Path
@@ -13,12 +12,13 @@ from ffcv.fields import NDArrayField
 from ffcv.fields.ndarray import NDArrayDecoder
 from ffcv.loader import OrderOption
 from ffcv.transforms import ToTensor
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 
 import MODALITIES
 
 
 ##################### FUNCTIONS FOR PRETRAINING DATASETS #####################
+
 
 def build_pretraining_dataset(is_train, args):
     split = "train" if is_train else "val"
@@ -34,14 +34,16 @@ class MMEarthDataset(Dataset):
         self.splits_path = args.splits_path  # path to the split file
         self.tile_info = args.tile_info  # tile info
         self.modalities = args.modalities  # modalities used for training
-        self.modalities_full = args.modalities_full  # all modalities present in the datasets. This is used to keep track of the indices of the modalities in the dataset.
-        self.indices = json.load(open(self.splits_path, 'r'))[split]
+        self.modalities_full = (
+            args.modalities_full
+        )  # all modalities present in the datasets. This is used to keep track of the indices of the modalities in the dataset.
+        self.indices = json.load(open(self.splits_path, "r"))[split]
         self.return_tuple = return_tuple
 
         self.norm_stats = args.band_stats  # mean, std, min and max of each band
 
     def _open_hdf5(self, path):
-        self.data_full = h5py.File(path, 'r')
+        self.data_full = h5py.File(path, "r")
 
     def __len__(self):
         return len(self.indices)
@@ -49,22 +51,25 @@ class MMEarthDataset(Dataset):
     def __getitem__(self, idx):
 
         # this is to ensure that multiple workers do not open the same file multiple times.
-        if not hasattr(self, 'data_full'):
+        if not hasattr(self, "data_full"):
             self._open_hdf5(self.data_path)
 
         # based on what bands and what modalities we need for training, we return the data[idx].)
         return_dict = OrderedDict()
-        name = self.data_full['metadata'][self.indices[idx]][0].decode('utf-8')
-        l2a = self.tile_info[name]['S2_type'] == 'l2a'
+        name = self.data_full["metadata"][self.indices[idx]][0].decode("utf-8")
+        l2a = self.tile_info[name]["S2_type"] == "l2a"
 
         for modality in self.modalities.keys():
             # get the indices based on how it is in modalities_full
-            if self.modalities[modality] == 'all':
+            if self.modalities[modality] == "all":
                 modality_idx = [i for i in range(len(self.modalities_full[modality]))]
             else:
-                modality_idx = [self.modalities_full[modality].index(m) for m in self.modalities[modality]]
+                modality_idx = [
+                    self.modalities_full[modality].index(m)
+                    for m in self.modalities[modality]
+                ]
 
-            if modality in ['biome', 'eco_region']:
+            if modality in ["biome", "eco_region"]:
                 # for these modalities the array is already one hot encoded. hence modality_idx is not needed.
                 data = self.data_full[modality][self.indices[idx], ...]
                 data = np.array(data)
@@ -74,22 +79,27 @@ class MMEarthDataset(Dataset):
                 data = np.array(data)
 
             # inside the band_stats, the name for sentinel2 is sentinel2_l1c or sentinel2_l2a
-            if modality == 'sentinel2':
-                modality_ = 'sentinel2_l2a' if l2a else 'sentinel2_l1c'
+            if modality == "sentinel2":
+                modality_ = "sentinel2_l2a" if l2a else "sentinel2_l1c"
             else:
                 modality_ = modality
 
-            if modality not in ['biome', 'eco_region', 'dynamic_world', 'esa_worldcover']:
-                means = np.array(self.norm_stats[modality_]['mean'])[modality_idx]
-                stds = np.array(self.norm_stats[modality_]['std'])[modality_idx]
-                if modality in ['era5', 'lat', 'lon', 'month']:
+            if modality not in [
+                "biome",
+                "eco_region",
+                "dynamic_world",
+                "esa_worldcover",
+            ]:
+                means = np.array(self.norm_stats[modality_]["mean"])[modality_idx]
+                stds = np.array(self.norm_stats[modality_]["std"])[modality_idx]
+                if modality in ["era5", "lat", "lon", "month"]:
                     # single value mean and std
                     data = (data - means) / stds
                 else:
-                    # single value mean and std for each band 
+                    # single value mean and std for each band
                     data = (data - means[:, None, None]) / stds[:, None, None]
 
-            if modality == 'dynamic_world':
+            if modality == "dynamic_world":
                 # the labels of dynamic world are 0, 1, 2, 3, 4, 5, 6, 7, 8, 9. We convert them to 0, 1, 2, 3, 4, 5, 6, 7, 8, nan respectively.
                 # originally when downloading the no data values are 0. hence we remap them to nan.
                 data = np.where(data == MODALITIES.NO_DATA_VAL[modality], np.nan, data)
@@ -100,7 +110,7 @@ class MMEarthDataset(Dataset):
                 # for any value greater than 8, we map them to nan
                 data = np.where(data > 8, np.nan, data)
 
-            if modality == 'esa_worldcover':
+            if modality == "esa_worldcover":
                 # the labels of esa worldcover are 10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 100, 255. We convert them to 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 255 respectively.
                 old_values = [10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 100, 255]
                 new_values = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 255]
@@ -110,19 +120,24 @@ class MMEarthDataset(Dataset):
                 data = np.where(data > 10, np.nan, data)
 
             # converting the nodata values to nan to keep everything consistent
-            data = np.where(data == MODALITIES.NO_DATA_VAL[modality], np.nan,
-                            data) if modality != 'dynamic_world' else data
+            data = (
+                np.where(data == MODALITIES.NO_DATA_VAL[modality], np.nan, data)
+                if modality != "dynamic_world"
+                else data
+            )
 
             if MODALITIES.MODALITY_TASK[modality] in ["classification", "segmentation"]:
+                # remap nan values to -1
+                data = np.where(np.isnan(data), -1, data)
                 data = data.astype(np.dtype("int64"))
             else:
                 data = data.astype(np.dtype("float32"))
 
             return_dict[modality] = data
 
-        # we also return the id, to differentiate between sentinel2_l1c and sentinel2_l2a, since this is given in the tile_info json file. To keep everything 
-        # consistent, we name the modalities as sentinel2 instead of sentinel2_l1c or sentinel2_l2a
-        return_dict['id'] = name
+        # we also return the id, to differentiate between sentinel2_l1c and sentinel2_l2a, since this is given in the tile_info json file.
+        return_dict["id"] = name
+        # To keep everything consistent, we name the modalities as sentinel2 instead of sentinel2_l1c or sentinel2_l2a
 
         if self.return_tuple:
             return tuple(return_dict.values())
@@ -137,9 +152,7 @@ def get_single_glob_file(data_root: Path, pattern) -> Path:
     return file[0]
 
 
-def create_MMEearth_args(
-        data_root: Path, modalities: dict
-) -> Namespace:
+def create_MMEearth_args(data_root: Path, modalities: dict) -> Namespace:
     args = Namespace()
 
     args.data_path = get_single_glob_file(data_root, "data_*.h5")
@@ -157,15 +170,15 @@ def create_MMEearth_args(
 
 
 def get_mmearth_dataloaders(
-        data_dir: Path,
-        processed_dir: Path,
-        modalities: dict,
-        num_workers: int,
-        batch_size_per_device: int,
-        splits: list[str] = None,
-        indices: list[list[int]] = None,
-        distributed: bool = False,
-) -> list[Union[ffcv.Loader, DataLoader]]:
+    data_dir: Path,
+    processed_dir: Path,
+    modalities: dict,
+    num_workers: int,
+    batch_size_per_device: int,
+    splits: list[str] = None,
+    indices: list[list[int]] = None,
+    distributed: bool = False,
+) -> list[Union[ffcv.Loader]]:
     """
     Creates and returns data loaders for the MMEarth dataset. If the processed beton file does not exist, it processes the data
     and creates the beton file, then returns FFCV data loaders.
@@ -253,9 +266,7 @@ def get_mmearth_dataloaders(
 
             if len(dataset) == 0:
                 assert not is_train, "training dataset has no samples"
-                print(
-                    f"No samples in evaluation split '{split}', skipping it"
-                )
+                print(f"No samples in evaluation split '{split}', skipping it")
                 dataloaders.append(None)
                 continue
 
@@ -268,21 +279,16 @@ def get_mmearth_dataloaders(
                 indices=idx,
             )
 
-        # Data decoding and augmentation
-        # Pipeline for each data field
-        pipelines = {
-            modality: [NDArrayDecoder(), ToTensor()] for modality in modalities
-        }
-
         # Replaces PyTorch data loader (`torch.utils.data.Dataloader`)
-        sampler = OrderOption.RANDOM if distributed else OrderOption.QUASI_RANDOM  # quasi random not working distributed
+        sampler = (
+            OrderOption.RANDOM if distributed else OrderOption.QUASI_RANDOM
+        )  # quasi random not working distributed
         sampler = sampler if is_train else OrderOption.SEQUENTIAL
         dataloader = ffcv.Loader(
             beton_file,
             batch_size=batch_size_per_device,
             num_workers=num_workers,
             order=sampler,
-            pipelines=pipelines,
             drop_last=is_train,
             distributed=distributed,
         )
@@ -293,11 +299,11 @@ def get_mmearth_dataloaders(
 
 
 def convert_mmearth_to_beton(
-        dataset: MMEarthDataset,
-        write_path: Path,
-        modalities: OrderedDict,
-        num_workers: int = -1,
-        indices: list = None,
+    dataset: MMEarthDataset,
+    write_path: Path,
+    modalities: OrderedDict,
+    num_workers: int = -1,
+    indices: list = None,
 ):
     """
     Converts a MMEarth dataset into a format optimized for a specified machine learning task and writes it to a specified path.
@@ -332,13 +338,13 @@ def convert_mmearth_to_beton(
 
     fields = OrderedDict()
     for i, name in enumerate(modalities):
-        if name == "id": continue  # cannot encode str
         x = sample[i]
         dtype = x.dtype
         assert dtype in [np.dtype("float32"), np.dtype("int64")]
         shape = x.shape
 
         fields[name] = NDArrayField(dtype=dtype, shape=shape)
+    # fields["id"] = NDArrayField(dtype=np.dtype("int64"), shape=(1,))
 
     # Pass a type for each data field
     writer = DatasetWriter(write_path, fields, num_workers=num_workers)

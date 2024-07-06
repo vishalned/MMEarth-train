@@ -12,7 +12,7 @@ from mmearth_dataset import MMEarthDataset, create_MMEearth_args, get_mmearth_da
 
 @pytest.mark.parametrize(
     "modalities",
-    [MODALITIES.INP_MODALITIES, MODALITIES.RGB_MODALITIES],
+    [MODALITIES.INP_MODALITIES, MODALITIES.RGB_MODALITIES, MODALITIES.OUT_MODALITIES],
 )
 def test_mmearth_dataset(modalities):
     split = "train"
@@ -29,7 +29,7 @@ def test_mmearth_dataset(modalities):
         if modalities == MODALITIES.OUT_MODALITIES:
             assert isinstance(
                 data["sentinel1"], np.ndarray
-            ), "'sentinel1' data should be a Tensor"
+            ), "'sentinel1' data should be an array"
             assert (
                     data["sentinel1"].shape[0] == s1_channel
             ), f"'sentinel1' data should have {s1_channel} channels"
@@ -37,24 +37,22 @@ def test_mmearth_dataset(modalities):
             s2_channel = 3
         assert isinstance(
             data["sentinel2"], np.ndarray
-        ), "'sentinel2' data should be a Tensor"
+        ), "'sentinel2' data should be an array"
         assert (
                 data["sentinel2"].shape[0] == s2_channel
         ), f"'sentinel2' data should have {s2_channel} channels"
 
-    # no tests for val/test currently
-
 
 @pytest.mark.parametrize(
     "modalities",
-    [MODALITIES.INP_MODALITIES, MODALITIES.RGB_MODALITIES],
+    [MODALITIES.INP_MODALITIES, MODALITIES.OUT_MODALITIES, MODALITIES.RGB_MODALITIES],
 )
 def test_mmearth_dataloader(modalities):
     test_out = Path("test_out")
-    test_out.mkdir(exist_ok=True)
+    test_out.mkdir(exist_ok=False)
 
     try:
-        loader = get_mmearth_dataloaders(
+        loaders = get_mmearth_dataloaders(
             MODALITIES.MMEARTH_DIR,
             test_out,
             modalities,
@@ -64,8 +62,9 @@ def test_mmearth_dataloader(modalities):
             indices=[list(range(10))],
         )
 
-        for data in loader:
-            break
+        for loader in loaders:
+            for data in loader:
+                break
     finally:
         # cleanup
         shutil.rmtree(test_out, ignore_errors=True)

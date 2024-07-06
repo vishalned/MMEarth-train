@@ -48,13 +48,13 @@ def build_dataset(split, args, percent = None, num_samples = None):
         nb_classes = args.nb_classes
         assert len(dataset.class_to_idx) == nb_classes
     elif args.data_set.split('.')[0] == "geobench":
-        from custom_dataset import geobench_dataset
+        from geobenchdataset import GeobenchDataset
         # split = "train" if is_train else "val"
         dataset_name = args.data_set.split('.')[1]
         if dataset_name in ["m-eurosat", "m-so2sat", "m-bigearthnet", "m-brick-kiln"]:
-            dataset = geobench_dataset(dataset_name=dataset_name, split=split, transform=None, benchmark_name="classification")
+            dataset = GeobenchDataset(dataset_name=dataset_name, split=split, transform=None, benchmark_name="classification")
         elif dataset_name in ["m-cashew-plantation", "m-SA-crop-type"]:
-            dataset = geobench_dataset(dataset_name=dataset_name, split=split, transform=None, benchmark_name="segmentation")
+            dataset = GeobenchDataset(dataset_name=dataset_name, split=split, transform=None, benchmark_name="segmentation")
         else:
             raise NotImplementedError()
         nb_classes = dataset.num_classes
@@ -65,7 +65,7 @@ def build_dataset(split, args, percent = None, num_samples = None):
         # set num_samples to a large number to avoid subsampling
         num_samples = 1000000000
     if (percent is not None and is_train) or (num_samples is not None and is_train):
-        from custom_dataset import geobench_dataset_subset
+        from geobenchdataset import geobench_dataset_subset
         if percent is not None:
             print("Subsampling the dataset to have only %d%% of the original samples" % (percent * 100))
         else:

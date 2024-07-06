@@ -14,7 +14,7 @@ def test_mmearth_dataset():
     dataset = MMEarthDataset(args, split=split, return_tuple=True)
 
     test_out = Path("test_out")
-    test_out.mkdir(exist_ok=True)
+    test_out.mkdir(exist_ok=False)
     write_path = test_out / "mmearth.beton"
 
     try:

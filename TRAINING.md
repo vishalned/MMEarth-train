@@ -23,7 +23,7 @@ python  -m torch.distributed.launch --nproc_per_node=8 main_pretrain.py \
         --blr 1.5e-4 \
         --epochs 200 \
         --warmup_epochs 40 \
-        --data_path /projects/dereeco/data/global-lr/data_1M_130_new/data_1M_130_new.h5 \
+        --data_dir /projects/dereeco/data/global-lr/data_1M_130_new \
         --output_dir /projects/dereeco/data/global-lr/ConvNeXt-V2/results/pt-all_mod_atto \
         --wandb True \
         --wandb_run_name sanity_check_atto \

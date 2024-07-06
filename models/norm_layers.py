@@ -1,5 +1,3 @@
-import numpy.random as random
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
