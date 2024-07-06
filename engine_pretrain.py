@@ -23,6 +23,7 @@ def train_one_epoch(
     optimizer: torch.optim.Optimizer,
     device: torch.device,
     epoch: int,
+    use_mixed: bool,
     loss_scaler,
     log_writer=None,
     args=None,
@@ -55,9 +56,10 @@ def train_one_epoch(
                 for key in samples:
                     samples[key] = samples[key].to(device, non_blocking=True)
 
-        loss, pred, mask, loss_dict_, log_var_list_, normalized_loss_list_ = model(
-            samples, mask_ratio=args.mask_ratio
-        )
+        with torch.autocast(device_type=device.__str__(), dtype=torch.float16, enabled=use_mixed):
+            loss, pred, mask, loss_dict_, log_var_list_, normalized_loss_list_ = model(
+                samples, mask_ratio=args.mask_ratio
+            )
         # loss_dict_ is a dictionary containing the loss values for each modalities
         # log_var_list_ is a list containing the log variance for each modality - used in uncertainty weighting
         # normalized_loss_list_ is a list containing the normalized loss for each modality - used in uncertainty weighting

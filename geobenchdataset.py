@@ -1,51 +1,110 @@
 import json
 from pathlib import Path
-from typing import Tuple, Union
+from typing import Tuple
 
 import ffcv
 import geobench
 import numpy as np
-import torch
-from geobench import TaskSpecifications
+from ffcv import DatasetWriter
+from ffcv.fields.basics import IntDecoder, IntField
+from ffcv.fields.ndarray import NDArrayDecoder, NDArrayField
+from ffcv.loader import OrderOption
+from ffcv.transforms import ToTensor, Squeeze
+from geobench import (
+    TaskSpecifications,
+    MultiLabelClassification,
+    SemanticSegmentation,
+    SegmentationClasses,
+)
 from torch.utils.data import Dataset, DataLoader
 
-BAND_NAMES = json.load(open("BAND_NAMES.json", "r"))
+GEOBENCH_TASK = {
+    "m-eurosat": "classification",
+    "m-so2sat": "classification",
+    "m-bigearthnet": "classification",
+    "m-brick-kiln": "classification",
+    "m-cashew-plant": "segmentation",
+    "m-SA-crop-type": "segmentation",
+}
+
+
+def get_band_names(version="0.9.1"):
+    if version == "1.0":
+        with open("BAND_NAMES_v1.json", "r") as f:
+            return json.load(f)
+    elif version == "0.9.1":
+        with open("BAND_NAMES.json", "r") as f:
+            return json.load(f)
+    else:
+        raise NotImplementedError("Only supporting version 0.9.1 and 1.0")
 
 
 class GeobenchDataset(Dataset):
-    def __init__(self, dataset_name=None, split="train", transform=None, benchmark_name="classification"):
+    def __init__(
+        self,
+        dataset_name=None,
+        split="train",
+        transform=None,
+        partition: str = "default",
+        version: str = "0.9.1",
+    ):
         if split == "val":
             split = "valid"
 
-        if benchmark_name == "classification":
-            benchmark_name = "classification_v0.9.1/"
-        elif benchmark_name == "segmentation":
-            benchmark_name = "segmentation_v0.9.1/"
+        task, benchmark_name = self.get_task(dataset_name, version)
 
-        for task in geobench.task_iterator(benchmark_name=benchmark_name):
-            if task.dataset_name == dataset_name:
-                break
+        self.benchmark_name = benchmark_name
         self.transform = transform
         self.dataset_name = dataset_name
-        self.dataset = task.get_dataset(split=split, band_names=BAND_NAMES[dataset_name])
+        self.dataset = task.get_dataset(
+            split=split,
+            band_names=get_band_names(version)[dataset_name],
+            partition_name=partition,
+        )
         self.label_map = task.get_label_map()
-        self.label_stats = task.label_stats() if benchmark_name != "segmentation_v0.9.1/" else "None"
+        self.label_stats = (
+            task.label_stats()
+            if benchmark_name != f"segmentation_v{version}/"
+            else "None"
+        )
         self.dataset_dir = task.get_dataset_dir()
-        if dataset_name == "m-brick-kiln":
-            self.num_classes = 2
-        elif dataset_name == "m-bigearthnet":
-            self.num_classes = 43
-        elif dataset_name == "m-cashew-plantation":
-            self.num_classes = 7
-        elif dataset_name == "m-SA-crop-type":
-            self.num_classes = 10
+        if hasattr(task.label_type, "class_names"):
+            self.class_names = task.label_type.class_names
+        elif hasattr(task.label_type, "class_name"):
+            self.class_names = task.label_type.class_name
         else:
-            self.num_classes = len(task.get_label_map().keys())
-        self.tmp_band_names = [self.dataset[0].bands[i].band_info.name for i in range(len(self.dataset[0].bands))]
+            raise Exception(f"Dataset {dataset_name} has no class names")
+        self.num_classes = task.label_type.n_classes
+
+        self.tmp_band_names = [
+            self.dataset[0].bands[i].band_info.name
+            for i in range(len(self.dataset[0].bands))
+        ]
         # get the tmp bands in the same order as the ones present in the BAND_NAMES.json file
-        self.tmp_band_indices = [self.tmp_band_names.index(band_name) for band_name in BAND_NAMES[dataset_name]]
+        self.tmp_band_indices = [
+            self.tmp_band_names.index(band_name)
+            for band_name in get_band_names(version)[dataset_name]
+        ]
+        self.patch_size = task.patch_size
+        self.label_type = task.label_type
+
         self.norm_stats = self.dataset.normalization_stats()
         self.in_channels = len(self.tmp_band_indices)
+
+    @staticmethod
+    def get_task(dataset_name: str, version: str) -> Tuple[TaskSpecifications, str]:
+        benchmark_name = GEOBENCH_TASK[dataset_name]
+        benchmark_name_ = ""
+        if benchmark_name == "classification":
+            benchmark_name_ = f"classification_v{version}/"
+        elif benchmark_name == "segmentation":
+            benchmark_name_ = f"segmentation_v{version}/"
+        task = None
+        for task_ in geobench.task_iterator(benchmark_name=benchmark_name_):
+            if task_.dataset_name == dataset_name:
+                task = task_
+        assert task is not None, f"couldn't find {dataset_name} in {benchmark_name_}"
+        return task, benchmark_name
 
     def __len__(self):
         return len(self.dataset)
@@ -71,13 +130,20 @@ class GeobenchDataset(Dataset):
 
         # normalize each band with its mean and std
         x = (x - mean[:, None, None]) / std[:, None, None]
-        x = torch.from_numpy(x).float()
+
+        # cast to float32
+        x = x.astype(np.dtype("float32"))
+        mean = mean.astype(np.dtype("float32"))
+        std = std.astype(np.dtype("float32"))
 
         # check if label is an object or a number
         if not (isinstance(label, int) or isinstance(label, list)):
             label = label.data
             # label is a memoryview object, convert it to a list, and then to a numpy array
-            label = np.array(list(label))
+            label = np.array(list(label), dtype=np.dtype("int64"))
+
+        if self.transform is not None:
+            self.transform(x)
 
         return x, label, mean, std
 
@@ -91,7 +157,9 @@ def get_geobench_dataloaders(
     partition: str = "default",
     no_ffcv: bool = False,
     indices: list[list[int]] = None,
-) -> Tuple[list[Union[ffcv.Loader, DataLoader]], TaskSpecifications]:
+    distributed: bool = False,
+    version: str = "0.9.1",
+) -> Tuple[list[ffcv.Loader], TaskSpecifications]:
     """
     Creates and returns data loaders for the GeobenchDataset dataset. If the processed beton file does not exist,
     it processes the data and creates the beton file, then returns FFCV data loaders.
@@ -114,6 +182,8 @@ def get_geobench_dataloaders(
         Disables the creation of beton files and returns PyTorch DataLoader instead. Default is False.
     indices : list[list[int]], optional
         Select indices to use for each split (starting at 0). Default is None, meaning all samples are used. Only applicable with FFCV enabled.
+    distributed: bool, optional
+        Whether distributed training is used
 
     Returns:
     -------
@@ -159,32 +229,28 @@ def get_geobench_dataloaders(
     processed_dir.mkdir(exist_ok=True)
 
     dataloaders = []
-    task, _ = GeobenchDataset.get_task(dataset_name)
+    task, _ = GeobenchDataset.get_task(dataset_name, version)
     for i, split in enumerate(splits):
         is_train = split == "train"
         subset = "" if indices is None else "_subset"
         beton_file = processed_dir / f"{split}_{dataset_name}_{partition}{subset}.beton"
 
         if not beton_file.exists() or no_ffcv:
-            if not no_ffcv:
-                print_rank_zero(
-                    f"Processed file {beton_file} does not exist, trying to create it now."
-                )
-                transform = None
-            else:
-                transform = to_tensor
+            print(
+                f"Processed file {beton_file} does not exist, trying to create it now."
+            )
+            transform = None
             dataset = GeobenchDataset(
                 dataset_name=dataset_name,
                 split=split,
                 transform=transform,
                 partition=partition,
+                version=version,
             )
 
             if len(dataset) == 0:
                 assert not is_train, "training dataset has no samples"
-                print_rank_zero(
-                    f"No samples in evaluation split '{split}', skipping it"
-                )
+                print(f"No samples in evaluation split '{split}', skipping it")
                 dataloaders.append(None)
                 continue
 
@@ -214,7 +280,10 @@ def get_geobench_dataloaders(
             "input": [NDArrayDecoder(), ToTensor()],
         }
         # get correct decoder for task
-        if isinstance(task.label_type, (MultiLabelClassification, SemanticSegmentation, SegmentationClasses)):
+        if isinstance(
+            task.label_type,
+            (MultiLabelClassification, SemanticSegmentation, SegmentationClasses),
+        ):
             pipelines.update(
                 {
                     "label": [
@@ -241,13 +310,17 @@ def get_geobench_dataloaders(
         )
 
         # Replaces PyTorch data loader (`torch.utils.data.Dataloader`)
+        sampler = (
+            OrderOption.RANDOM if distributed else OrderOption.QUASI_RANDOM
+        )  # quasi random not working distributed
         dataloader = ffcv.Loader(
             beton_file,
             batch_size=batch_size_per_device,
             num_workers=num_workers,
-            order=OrderOption.QUASI_RANDOM if is_train else OrderOption.SEQUENTIAL,
+            order=sampler if is_train else OrderOption.SEQUENTIAL,
             pipelines=pipelines,
             drop_last=is_train,
+            distributed=distributed,
         )
 
         dataloaders.append(dataloader)
@@ -298,7 +371,7 @@ def convert_geobench_to_beton(
     --------------
     ```python
     from pathlib import Path
-    from data.GeobenchDataset import GeobenchDataset
+    from geobench_dataset import GeobenchDataset
 
     # Assuming 'my_dataset' is a pre-existing dataset object
     my_dataset = GeobenchDataset(...)  # Replace with actual dataset initialization
@@ -367,20 +440,3 @@ def convert_geobench_to_beton(
 
     # Write dataset
     writer.from_indexed_dataset(dataset, indices=indices)
-
-
-class geobench_dataset_subset(Dataset):
-
-    def __init__(self, dataset, indices):
-        self.dataset = dataset
-        self.indices = indices
-        self.in_channels = dataset.in_channels
-        self.num_classes = dataset.num_classes
-        self.norm_stats = dataset.norm_stats
-        self.dataset_name = dataset.dataset_name
-
-    def __getitem__(self, idx):
-        return self.dataset[self.indices[idx]]
-
-    def __len__(self):
-        return len(self.indices)

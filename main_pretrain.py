@@ -153,6 +153,7 @@ def get_args_parser():
     parser.add_argument(
         "--dist_url", default="env://", help="url used to set up distributed training"
     )
+    parser.add_argument("--use_mixed", type=str2bool, default=False)
     parser.add_argument("--sparse", type=str2bool, default=True)
     parser.add_argument("--debug", type=str2bool, default=False)
 
@@ -312,6 +313,7 @@ def main(args):
             optimizer,
             device,
             epoch,
+            args.use_mixed,
             loss_scaler,
             log_writer=log_writer,
             args=args,

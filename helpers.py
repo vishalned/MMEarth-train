@@ -717,7 +717,7 @@ def visualize_segmentation(model, dataloader, device, args, epoch):
     old_level = logger.level
     logger.setLevel(100)
 
-    num_classes = 7 if args.data_set == "geobench.m-cashew-plantation" else 10
+    num_classes = 7 if args.data_set == "m-cashew-plantation" else 10
 
     os.makedirs(
         "/home/qbk152/vishal/global-lr-train/ConvNeXt-V2/visualize", exist_ok=True

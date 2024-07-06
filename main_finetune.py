@@ -17,6 +17,7 @@ import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
 import wandb
+from geobench import GEO_BENCH_DIR
 from timm.data.mixup import Mixup
 from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
 from timm.models.layers import trunc_normal_
@@ -28,6 +29,7 @@ import models.convnextv2_unet as convnextv2_unet
 from custom_loss import LabelSmoothingBinaryCrossEntropy
 from datasets import build_dataset
 from engine_finetune import train_one_epoch, evaluate
+from geobenchdataset import get_geobench_dataloaders
 from helpers import NativeScalerWithGradNormCount as NativeScaler
 from helpers import str2bool, remap_checkpoint_keys
 from optim_factory import create_optimizer, LayerDecayValueAssigner
@@ -288,9 +290,11 @@ def get_args_parser():
     )
 
     # Dataset parameters
-    parser.add_argument("--data_path", default="", type=str, help="dataset path")
     parser.add_argument(
-        "--nb_classes", default=10, type=int, help="number of the classification types"
+        "--processed_dir",
+        default=None,
+        type=str,
+        help="path to processed data (defaults to data location",
     )
     parser.add_argument(
         "--output_dir", default="", help="path where to save, empty for no saving"
@@ -305,23 +309,19 @@ def get_args_parser():
     parser.add_argument(
         "--eval_data_path", default=None, type=str, help="dataset path for evaluation"
     )
-    parser.add_argument("--imagenet_default_mean_and_std", type=str2bool, default=True)
     parser.add_argument(
         "--data_set",
-        default="IMNET",
+        default="m-bigearthnet",
         choices=[
-            "CIFAR",
-            "IMNET",
-            "image_folder",
-            "geobench.m-eurosat",
-            "geobench.m-so2sat",
-            "geobench.m-bigearthnet",
-            "geobench.m-brick-kiln",
-            "geobench.m-cashew-plantation",
-            "geobench.m-SA-crop-type",
+            "m-eurosat",
+            "m-so2sat",
+            "m-bigearthnet",
+            "m-brick-kiln",
+            "m-cashew-plantation",
+            "m-SA-crop-type",
         ],
         type=str,
-        help="ImageNet dataset path",
+        help="Which dataset to use",
     )
     parser.add_argument("--auto_resume", type=str2bool, default=True)
     parser.add_argument("--save_ckpt", type=str2bool, default=True)
@@ -333,12 +333,6 @@ def get_args_parser():
     )
     parser.add_argument(
         "--eval", type=str2bool, default=False, help="Perform evaluation only"
-    )
-    parser.add_argument(
-        "--dist_eval",
-        type=str2bool,
-        default=False,
-        help="Enabling distributed evaluation",
     )
     parser.add_argument("--num_workers", default=4, type=int)
     parser.add_argument(
@@ -375,9 +369,17 @@ def get_args_parser():
     parser.add_argument("--pretraining", type=str, default="")
     parser.add_argument("--use_orig_stem", type=str2bool, default=False)
     parser.add_argument("--run_on_test", type=str2bool, default=False)
-    parser.add_argument("--percent", type=float, default=None)
-    parser.add_argument("--num_samples", type=int, default=None)
+    parser.add_argument(
+        "--partition",
+        type=str,
+        default="default",
+        help="Amount of GeoBench data to train on. "
+        'Available: "default", "0.01x_train", "0.02x_train", "0.05x_train", "0.10x_train", '
+        '"0.20x_train", "0.50x_train", "1.00x_train" (default: "default").',
+    )
     parser.add_argument("--test_scores_dir", type=str, default="./test_scores/")
+    parser.add_argument("--debug", type=str2bool, default=False)
+    parser.add_argument("--version", type=str, default="0.9.1")
     return parser
 
 
@@ -394,65 +396,29 @@ def main(args: argparse.Namespace):
     np.random.seed(seed)
     cudnn.benchmark = True
 
-    if args.num_samples is not None:
-        dataset_train, args.nb_classes = build_dataset(
-            split="train", args=args, num_samples=args.num_samples
-        )
-    else:
-        dataset_train, args.nb_classes = build_dataset(
-            split="train", args=args, percent=args.percent
-        )
-
-    dataset_val, _ = build_dataset(split="val", args=args)
-
+    processed_dir = args.processed_dir
+    if processed_dir is None:
+        processed_dir = GEO_BENCH_DIR
+    (train_dataloader, val_dataloader), task = get_geobench_dataloaders(
+        args.data_set,
+        processed_dir,
+        args.num_workers,
+        args.batch_size,
+        ["train", "val"],
+        args.partition,
+        indices=[list(range(10)), list(range(10))] if args.debug else None,
+        version=args.version,
+    )
+    num_classes = task.label_type.n_classes
+    in_channels = len(task.band_stats) - 1 # without label
     num_tasks = helpers.get_world_size()
     global_rank = helpers.get_rank()
-    sampler_train = torch.utils.data.DistributedSampler(
-        dataset_train,
-        num_replicas=num_tasks,
-        rank=global_rank,
-        shuffle=True,
-        seed=args.seed,
-    )
-    print("Sampler_train = %s" % str(sampler_train))
-    if args.dist_eval:
-        if len(dataset_val) % num_tasks != 0:
-            print(
-                "Warning: Enabling distributed evaluation with an eval dataset not divisible by process number. "
-                "This will slightly alter validation results as extra duplicate entries are added to achieve "
-                "equal num of samples per-process."
-            )
-        sampler_val = torch.utils.data.DistributedSampler(
-            dataset_val, num_replicas=num_tasks, rank=global_rank, shuffle=False
-        )
-    else:
-        sampler_val = torch.utils.data.SequentialSampler(dataset_val)
 
     if global_rank == 0 and args.log_dir is not None:
         os.makedirs(args.log_dir, exist_ok=True)
         log_writer = helpers.TensorboardLogger(log_dir=args.log_dir)
     else:
         log_writer = None
-
-    data_loader_train = torch.utils.data.DataLoader(
-        dataset_train,
-        sampler=sampler_train,
-        batch_size=args.batch_size,
-        num_workers=args.num_workers,
-        pin_memory=args.pin_mem,
-        drop_last=True,
-    )
-    if dataset_val is not None:
-        data_loader_val = torch.utils.data.DataLoader(
-            dataset_val,
-            sampler=sampler_val,
-            batch_size=args.batch_size,
-            num_workers=args.num_workers,
-            pin_memory=args.pin_mem,
-            drop_last=False,
-        )
-    else:
-        data_loader_val = None
 
     mixup_fn = None
     # default code provided by ConvNeXt authors. This is not used in MMEarth experiments.
@@ -467,31 +433,31 @@ def main(args: argparse.Namespace):
             switch_prob=args.mixup_switch_prob,
             mode=args.mixup_mode,
             label_smoothing=args.smoothing,
-            num_classes=args.nb_classes,
+            num_classes=num_classes,
         )
 
     # loading the models
     if "convnextv2_unet" in args.model:
         model = convnextv2_unet.__dict__[args.model](
-            num_classes=args.nb_classes,
+            num_classes=num_classes,
             drop_path_rate=args.drop_path,
             head_init_scale=args.head_init_scale,
             args=args,
             patch_size=args.patch_size,
             img_size=args.input_size,
             use_orig_stem=args.use_orig_stem,
-            in_chans=dataset_train.in_channels,
+            in_chans=in_channels,
         )
     else:
         model = convnextv2.__dict__[args.model](
-            num_classes=args.nb_classes,
+            num_classes=num_classes,
             drop_path_rate=args.drop_path,
             head_init_scale=args.head_init_scale,
             args=args,
             patch_size=args.patch_size,
             img_size=args.input_size,
             use_orig_stem=args.use_orig_stem,
-            in_chans=dataset_train.in_channels,
+            in_chans=in_channels,
         )
 
     # finetune or linear probing and loading the pre trained models
@@ -577,7 +543,7 @@ def main(args: argparse.Namespace):
                 param.requires_grad = False
 
             # add a new head
-            model.head = torch.nn.Linear(in_features, args.nb_classes)
+            model.head = torch.nn.Linear(in_features, num_classes)
             model.head.weight.requires_grad = True
             model.head.bias.requires_grad = True
             # manually initialize the new head like how its done in the fine-tuning part above
@@ -604,7 +570,7 @@ def main(args: argparse.Namespace):
     print("number of params:", n_parameters)
 
     eff_batch_size = args.batch_size * args.update_freq * helpers.get_world_size()
-    num_training_steps_per_epoch = len(dataset_train) // eff_batch_size
+    num_training_steps_per_epoch = len(train_dataloader) // eff_batch_size
 
     if args.lr is None:
         args.lr = args.blr * eff_batch_size / 256
@@ -647,7 +613,7 @@ def main(args: argparse.Namespace):
         get_num_layer=assigner.get_layer_id if assigner is not None else None,
         get_layer_scale=assigner.get_scale if assigner is not None else None,
     )
-    loss_scaler = NativeScaler()
+    loss_scaler = NativeScaler(args.device)
 
     if mixup_fn is not None:
         # smoothing is handled with mixup label transform
@@ -658,7 +624,7 @@ def main(args: argparse.Namespace):
         # for segmentations problems we ensure that smoothing is not applied
         criterion = torch.nn.CrossEntropyLoss()
 
-    if args.data_set == "geobench.m-bigearthnet":
+    if args.data_set == "m-bigearthnet":
         criterion = LabelSmoothingBinaryCrossEntropy(smoothing=args.smoothing)
 
     print("criterion = %s" % str(criterion))
@@ -704,15 +670,15 @@ def main(args: argparse.Namespace):
             data_loader_test, model, device, use_amp=args.use_amp, args=args
         )
 
-        if args.data_set == "geobench.m-bigearthnet":
+        if args.data_set == "m-bigearthnet":
             print(
                 f"mean AP of the model on the {len(dataset_test)} test images: {test_stats['meanAP']:.5f}"
             )
             test_score = test_stats["meanAP"]
 
         elif (
-            args.data_set == "geobench.m-SA-crop-type"
-            or args.data_set == "geobench.m-cashew-plantation"
+            args.data_set == "m-SA-crop-type"
+            or args.data_set == "m-cashew-plantation"
         ):
             print(
                 f"mIoU of the model on the {len(dataset_test)} test images: {test_stats['meanIoU']:.5f}"
@@ -726,8 +692,8 @@ def main(args: argparse.Namespace):
 
         if helpers.is_main_process():
             if (
-                args.data_set == "geobench.m-cashew-plantation"
-                or args.data_set == "geobench.m-SA-crop-type"
+                args.data_set == "m-cashew-plantation"
+                or args.data_set == "m-SA-crop-type"
             ):
                 file_str = f"unet--{args.data_set}--{args.pretraining}.txt"
             else:
@@ -752,8 +718,6 @@ def main(args: argparse.Namespace):
     print("Start training for %d epochs" % args.epochs)
     start_time = time.time()
     for epoch in range(args.start_epoch, args.epochs):
-        if args.distributed:
-            data_loader_train.sampler.set_epoch(epoch)
         if log_writer is not None:
             log_writer.set_step(epoch * num_training_steps_per_epoch * args.update_freq)
         if "convnextv2_unet" in args.model:
@@ -786,7 +750,7 @@ def main(args: argparse.Namespace):
         train_stats = train_one_epoch(
             model,
             criterion,
-            data_loader_train,
+            train_dataloader,
             optimizer,
             device,
             epoch,
@@ -808,14 +772,15 @@ def main(args: argparse.Namespace):
                     epoch=epoch,
                     model_ema=model_ema,
                 )
-        if data_loader_val is not None:
+        if val_dataloader is not None:
+            val_samples = val_dataloader.reader.num_samples
             test_stats = evaluate(
-                data_loader_val, model, device, use_amp=args.use_amp, args=args
+                val_dataloader, model, device, use_amp=args.use_amp, args=args
             )
 
-            if args.data_set == "geobench.m-bigearthnet":
+            if args.data_set == "m-bigearthnet":
                 print(
-                    f"mean AP of the model on the {len(dataset_val)} test images: {test_stats['meanAP']:.5f}"
+                    f"mean AP of the model on the {val_samples} test images: {test_stats['meanAP']:.5f}"
                 )
                 if max_accuracy < test_stats["meanAP"]:
                     max_accuracy = test_stats["meanAP"]
@@ -838,12 +803,13 @@ def main(args: argparse.Namespace):
                     log_writer.update(
                         test_loss=test_stats["loss"], head="perf", step=epoch
                     )
-            elif (
-                args.data_set == "geobench.m-SA-crop-type"
-                or args.data_set == "geobench.m-cashew-plantation"
-            ):
+            elif args.data_set in [
+                "m-SA-crop-type",
+                "m-cashew-plantation",
+                "m-cashew-plant",
+            ]:
                 print(
-                    f"mIoU of the model on the {len(dataset_val)} test images: {test_stats['meanIoU']:.5f}"
+                    f"mIoU of the model on the {val_samples} test images: {test_stats['meanIoU']:.5f}"
                 )
                 if max_accuracy < test_stats["meanIoU"]:
                     max_accuracy = test_stats["meanIoU"]
@@ -868,7 +834,7 @@ def main(args: argparse.Namespace):
                     )
             else:
                 print(
-                    f"Accuracy of the model on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%"
+                    f"Accuracy of the model on the {val_samples} test images: {test_stats['acc1']:.1f}%"
                 )
                 if max_accuracy < test_stats["acc1"]:
                     max_accuracy = test_stats["acc1"]
@@ -909,10 +875,10 @@ def main(args: argparse.Namespace):
             # repeat testing routines for EMA, if ema eval is turned on
             if args.model_ema and args.model_ema_eval:
                 test_stats_ema = evaluate(
-                    data_loader_val, model_ema.ema, device, use_amp=args.use_amp
+                    val_dataloader, model_ema.ema, device, use_amp=args.use_amp
                 )
                 print(
-                    f"Accuracy of the model EMA on {len(dataset_val)} test images: {test_stats_ema['acc1']:.1f}%"
+                    f"Accuracy of the model EMA on {val_dataloader.reader.num_samples} test images: {test_stats_ema['acc1']:.1f}%"
                 )
                 if max_accuracy_ema < test_stats_ema["acc1"]:
                     max_accuracy_ema = test_stats_ema["acc1"]
@@ -964,37 +930,40 @@ def main(args: argparse.Namespace):
         helpers.load_state_dict(model, checkpoint["model"], prefix=args.model_prefix)
         model.to(device)
 
-        dataset_test, _ = build_dataset(split="test", args=args)
-        sampler_test = torch.utils.data.SequentialSampler(dataset_test)
-        data_loader_test = torch.utils.data.DataLoader(
-            dataset_test,
-            sampler=sampler_test,
-            batch_size=16,  # we hardcode the batch size to 16 for the test set since no of test samples for cashew is 50
-            num_workers=args.num_workers,
-            pin_memory=args.pin_mem,
-            drop_last=False,
-        )
-        test_stats = evaluate(
-            data_loader_test, model, device, use_amp=args.use_amp, args=args
+        (test_loader,), task = get_geobench_dataloaders(
+            args.data_set,
+            processed_dir,
+            args.num_workers,
+            args.batch_size,
+            ["test"],
+            args.partition,
+            indices=[list(range(10))] if args.debug else None,
+            version=args.version,
         )
 
-        if args.data_set == "geobench.m-bigearthnet":
+        test_stats = evaluate(
+            test_loader, model, device, use_amp=args.use_amp, args=args
+        )
+        test_samples = test_loader.reader.num_samples
+
+        if args.data_set == "m-bigearthnet":
             print(
-                f"mean AP of the model on the {len(dataset_test)} test images: {test_stats['meanAP']:.5f}"
+                f"mean AP of the model on the {test_samples} test images: {test_stats['meanAP']:.5f}"
             )
             test_score = test_stats["meanAP"]
 
-        elif (
-            args.data_set == "geobench.m-SA-crop-type"
-            or args.data_set == "geobench.m-cashew-plantation"
-        ):
+        elif args.data_set in [
+            "m-SA-crop-type",
+            "m-cashew-plantation",
+            "m-cashew-plant",
+        ]:
             print(
-                f"mIoU of the model on the {len(dataset_test)} test images: {test_stats['meanIoU']:.5f}"
+                f"mIoU of the model on the {test_samples} test images: {test_stats['meanIoU']:.5f}"
             )
             test_score = test_stats["meanIoU"]
         else:
             print(
-                f"Accuracy of the model on the {len(dataset_test)} test images: {test_stats['acc1']:.1f}%"
+                f"Accuracy of the model on the {test_samples} test images: {test_stats['acc1']:.1f}%"
             )
             test_score = test_stats["acc1"]
 
@@ -1002,17 +971,15 @@ def main(args: argparse.Namespace):
 
         if helpers.is_main_process():
             if (
-                args.data_set == "geobench.m-cashew-plantation"
-                or args.data_set == "geobench.m-SA-crop-type"
+                args.data_set == "m-cashew-plantation"
+                or args.data_set == "m-SA-crop-type"
             ):
                 file_str = f"unet_lp&ft--{args.data_set}--{args.pretraining}.txt"
             else:
-                if args.percent is None and args.num_samples is None:
+                if args.partition in ["default", "1.00x_train"]:
                     file_str = f"{'lp' if args.linear_probe else 'ft'}--{args.data_set}--{args.pretraining}.txt"
                 else:
-                    text = (
-                        args.percent if args.percent is not None else args.num_samples
-                    )
+                    text = args.partition
                     file_str = f"{'lp' if args.linear_probe else 'ft'}--{args.data_set}--{args.pretraining}--{text}.txt"
 
             if not os.path.exists(args.test_scores_dir):

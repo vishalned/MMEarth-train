@@ -47,7 +47,7 @@ origstem=False
 
 
 pretraining=$model
-datasets=("geobench.m-bigearthnet" "geobench.m-so2sat")
+datasets=("m-bigearthnet" "m-so2sat")
 linear_probe=False
 output_dir_base="./results"
 log_dir_base="./logs"

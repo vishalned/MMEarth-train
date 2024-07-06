@@ -14,7 +14,7 @@
 
 
 pretraining=s2_12-patch16-ip112-newstem
-datasets=("geobench.m-so2sat" "geobench.m-bigearthnet")
+datasets=("m-so2sat" "m-bigearthnet")
 linear_probe=True
 output_dir_base="/projects/dereeco/data/global-lr/ConvNeXt-V2/results"
 log_dir_base="/projects/dereeco/data/global-lr/ConvNeXt-V2/logs"

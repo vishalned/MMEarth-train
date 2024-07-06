@@ -6,8 +6,12 @@ import pytest
 
 import MODALITIES
 
-from geobenchdataset import GeobenchDataset
-from mmearth_dataset import MMEarthDataset, create_MMEearth_args, get_mmearth_dataloaders
+from geobenchdataset import GeobenchDataset, get_geobench_dataloaders
+from mmearth_dataset import (
+    MMEarthDataset,
+    create_MMEearth_args,
+    get_mmearth_dataloaders,
+)
 
 
 @pytest.mark.parametrize(
@@ -31,7 +35,7 @@ def test_mmearth_dataset(modalities):
                 data["sentinel1"], np.ndarray
             ), "'sentinel1' data should be an array"
             assert (
-                    data["sentinel1"].shape[0] == s1_channel
+                data["sentinel1"].shape[0] == s1_channel
             ), f"'sentinel1' data should have {s1_channel} channels"
         elif modalities == MODALITIES.RGB_MODALITIES:
             s2_channel = 3
@@ -39,7 +43,7 @@ def test_mmearth_dataset(modalities):
             data["sentinel2"], np.ndarray
         ), "'sentinel2' data should be an array"
         assert (
-                data["sentinel2"].shape[0] == s2_channel
+            data["sentinel2"].shape[0] == s2_channel
         ), f"'sentinel2' data should have {s2_channel} channels"
 
 
@@ -87,6 +91,7 @@ def test_geobench_dataset(split, dataset_name):
         dataset_name=dataset_name,
         split=split,
         transform=None,
+        version="1.0"
     )
 
     assert len(dataset) > 0, f"Dataset '{dataset_name}' should not be empty"
@@ -96,7 +101,7 @@ def test_geobench_dataset(split, dataset_name):
     if dataset_name == "m-brick-kiln":
         expected = 3
     assert (
-            n_channel == expected
+        n_channel == expected
     ), f"Dataset '{dataset_name}' should have {expected} channels, found {n_channel}"
 
 
@@ -111,11 +116,7 @@ def test_geobench_dataset(split, dataset_name):
         "m-SA-crop-type",
     ],
 )
-@pytest.mark.parametrize(
-    "no_ffcv",
-    [False, True],
-)
-def test_geobench_dataloader(dataset_name, no_ffcv):
+def test_geobench_dataloader(dataset_name):
     test_out = Path("test_out")
     test_out.mkdir(exist_ok=True)
     splits = ["train", "val", "test"]
@@ -129,8 +130,8 @@ def test_geobench_dataloader(dataset_name, no_ffcv):
             2,
             splits,
             partition,
-            no_ffcv,
-            indices=None if no_ffcv else [list(range(10)), list(range(10)), list(range(10))],
+            indices=[list(range(10)), list(range(10)), list(range(10))],
+            version="1.0"
         )
         for loader in loaders:
             for data in loader:

@@ -20,7 +20,7 @@
 
 
 
-datasets=("geobench.m-bigearthnet" "geobench.m-so2sat" "geobench.m-eurosat")
+datasets=("m-bigearthnet" "m-so2sat" "m-eurosat")
 linear_probe=True
 task_type=lp # lp for linear probe, ft for fine-tuning
 pretraining=pt-all_mod_tiny_v100
@@ -29,7 +29,7 @@ pretraining=pt-all_mod_tiny_v100
 
 
 # percents=(0.005 0.05 0.5)
-samples=(100 1000 10000)
+partitions=("0.01x_train" "0.05x_train" "0.50x_train") # for bigearthnet this corresponds to (200, 1000, 10000) samples
 dataset_idx=$(( (SLURM_ARRAY_TASK_ID - 1) / 3))
 idx=$(( (SLURM_ARRAY_TASK_ID - 1) % 3 ))
 dataset=${datasets[$dataset_idx]}

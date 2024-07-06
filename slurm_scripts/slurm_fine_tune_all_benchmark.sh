@@ -14,7 +14,7 @@
 
 
 pretraining=gassl-resnet50
-datasets=("geobench.m-bigearthnet" "geobench.m-so2sat")
+datasets=("m-bigearthnet" "m-so2sat")
 linear_probe=False
 output_dir_base="/projects/dereeco/data/global-lr/ConvNeXt-V2/results"
 log_dir_base="/projects/dereeco/data/global-lr/ConvNeXt-V2/logs"

@@ -51,7 +51,7 @@ python  -m torch.distributed.launch --nproc_per_node=8 main_pretrain.py \
 --input_size # ensure this is also the same as what was used for the pretrained model. NOTE: This is not the image size of the finetuning dataset.  
 ```
 
-**Bands:** We have enabled finetuning on GEO-Bench datasets (bigearthnet, so2sat, eurosat, cashew-plantation, SA-crop-type, brick-kiln). The datasets are named like `geobench.m-bigearthnet` for example. Modify `BAND_NAMES.json`, to change the bands that need to be used for these datasets. You can either use 3 bands (RGB) or all 12 bands. (eg. In the case of so2sat, the dataset doesnt consist of 12 bands, hence we replace the missing bands with ones containing similar wavelength (B1 -> B2, B9 -> B8A)).
+**Bands:** We have enabled finetuning on GEO-Bench datasets (bigearthnet, so2sat, eurosat, cashew-plantation, SA-crop-type, brick-kiln). The datasets are named like `m-bigearthnet` for example. Modify `BAND_NAMES.json`, to change the bands that need to be used for these datasets. You can either use 3 bands (RGB) or all 12 bands. (eg. In the case of so2sat, the dataset doesnt consist of 12 bands, hence we replace the missing bands with ones containing similar wavelength (B1 -> B2, B9 -> B8A)).
 
 **Finetuning on GEO-Bench on a single gpu:**
 ```sh
@@ -72,7 +72,7 @@ python -m  main_finetune \
             --smoothing 0.2 \
             --finetune /projects/dereeco/data/global-lr/ConvNeXt-V2/results/pt-all_mod_uncertainty/checkpoint-199.pth \
             --output_dir "/home/qbk152/vishal/global-lr-train/ConvNeXt-V2/results/testing" \
-            --data_set "geobench.m-bigearthnet" \
+            --data_set "m-bigearthnet" \
             --linear_probe True \
             --pretraining testing \
             --wandb False \

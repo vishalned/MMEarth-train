@@ -35,7 +35,7 @@ python -m  main_finetune \
             --smoothing 0. \
             --finetune /projects/dereeco/data/global-lr/ConvNeXt-V2/results/pt-s2rgb-patch16-ip112-newstem/checkpoint-199.pth \
             --output_dir "/projects/dereeco/data/global-lr/ConvNeXt-V2/results/testing" \
-            --data_set "geobench.m-cashew-plantation" \
+            --data_set "m-cashew-plantation" \
             --linear_probe True \
             --pretraining testing\
             --wandb True \
