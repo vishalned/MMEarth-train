@@ -192,6 +192,7 @@ def main(args):
             "batch_size": args.batch_size,
             "update_freq": args.update_freq,
             "use_orig_stem": args.use_orig_stem,
+            "use_mixed": args.use_mixed,
         }
 
         wandb.init(project=args.wandb_project, config=config)
