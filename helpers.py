@@ -22,7 +22,8 @@ from timm.utils import get_state_dict
 try:
     from torch._six import inf
 except ModuleNotFoundError:  # for newer pytorch versions
-    from torch import inf, Tensor
+    from torch import inf
+from torch import Tensor
 
 from tensorboardX import SummaryWriter
 from collections import OrderedDict
