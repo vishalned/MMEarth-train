@@ -177,13 +177,12 @@ def main(args):
     args.modalities_full = MODALITIES_FULL
     #################################################################################################
 
-    if args.wandb and args.local_rank == 0:
+    if args.wandb and (args.local_rank == 0 or not args.distributed):
         print("Logging to wandb")
         config = {
             "model": args.model,
             "mask_ratio": args.mask_ratio,
             "norm_pix_loss": args.norm_pix_loss,
-            "loss_type": args.loss_type,
             "loss_aggr": args.loss_aggr,
             "loss_full": args.loss_full,
             "patch_size": args.patch_size,
@@ -192,6 +191,8 @@ def main(args):
             "batch_size": args.batch_size,
             "update_freq": args.update_freq,
             "use_orig_stem": args.use_orig_stem,
+            "weight_decay": args.weight_decay,
+            "sparse": args.sparse,
             "use_mixed": args.use_mixed,
         }
 
