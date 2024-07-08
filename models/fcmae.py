@@ -9,13 +9,7 @@ from timm.models.layers import trunc_normal_
 from torch import Tensor
 
 from MODALITIES import PIXEL_WISE_MODALITIES
-from MinkowskiEngine import (
-    MinkowskiConvolution,
-    MinkowskiDepthwiseConvolution,
-    MinkowskiLinear,
-)
 from .convnextv2 import Block, ConvNeXtV2
-from .convnextv2_sparse import SparseConvNeXtV2
 from .norm_layers import LayerNorm
 
 
@@ -28,18 +22,18 @@ class FCMAE(nn.Module):
     """Fully Convolutional Masked Autoencoder with ConvNeXtV2 backbone"""
 
     def __init__(
-        self,
-        img_size: int = 112,
-        depths: list[int] = None,
-        dims: list[int] = None,
-        decoder_depth: int = 1,
-        decoder_embed_dim: int = 512,
-        patch_size: float = 16,
-        mask_ratio: float = 0.6,
-        norm_pix_loss: bool = False,
-        args: Namespace = None,
-        loss_fn=None,
-        sparse: bool = True,
+            self,
+            img_size: int = 112,
+            depths: list[int] = None,
+            dims: list[int] = None,
+            decoder_depth: int = 1,
+            decoder_embed_dim: int = 512,
+            patch_size: float = 16,
+            mask_ratio: float = 0.6,
+            norm_pix_loss: bool = False,
+            args: Namespace = None,
+            loss_fn=None,
+            sparse: bool = True,
     ):
         super().__init__()
 
@@ -92,6 +86,7 @@ class FCMAE(nn.Module):
 
         # encoder
         if sparse:
+            from .convnextv2_sparse import SparseConvNeXtV2
             self.encoder = SparseConvNeXtV2(
                 in_chans=self.in_chans,
                 depths=depths,
@@ -137,7 +132,7 @@ class FCMAE(nn.Module):
                 self.decoder_dict[modality] = nn.Sequential(*decoder)
                 self.pred_dict[modality] = nn.Conv2d(
                     in_channels=decoder_embed_dim,
-                    out_channels=patch_size**2 * self.out_chans[modality],
+                    out_channels=patch_size ** 2 * self.out_chans[modality],
                     kernel_size=1,
                 )
             elif modality in ["biome", "eco_region", "lat", "lon", "month", "era5"]:
@@ -155,15 +150,21 @@ class FCMAE(nn.Module):
         self.random_crop = RandomCrop((img_size, img_size))
 
     def _init_weights(self, m):
-        if isinstance(m, MinkowskiConvolution):
-            trunc_normal_(m.kernel, std=0.02)
-            nn.init.constant_(m.bias, 0)
-        if isinstance(m, MinkowskiDepthwiseConvolution):
-            trunc_normal_(m.kernel)
-            nn.init.constant_(m.bias, 0)
-        if isinstance(m, MinkowskiLinear):
-            trunc_normal_(m.linear.weight)
-            nn.init.constant_(m.linear.bias, 0)
+        if self.sparse:
+            from MinkowskiEngine import (
+                MinkowskiConvolution,
+                MinkowskiDepthwiseConvolution,
+                MinkowskiLinear,
+            )
+            if isinstance(m, MinkowskiConvolution):
+                trunc_normal_(m.kernel, std=0.02)
+                nn.init.constant_(m.bias, 0)
+            if isinstance(m, MinkowskiDepthwiseConvolution):
+                trunc_normal_(m.kernel)
+                nn.init.constant_(m.bias, 0)
+            if isinstance(m, MinkowskiLinear):
+                trunc_normal_(m.linear.weight)
+                nn.init.constant_(m.linear.bias, 0)
         if isinstance(m, nn.Conv2d):
             w = m.weight.data
             trunc_normal_(w.view([w.shape[0], -1]))
@@ -193,7 +194,7 @@ class FCMAE(nn.Module):
         h = w = imgs.shape[2] // p
         x = imgs.reshape(shape=(imgs.shape[0], channels, h, p, w, p))
         x = torch.einsum("nchpwq->nhwpqc", x)
-        x = x.reshape(shape=(imgs.shape[0], h * w, p**2 * channels))
+        x = x.reshape(shape=(imgs.shape[0], h * w, p ** 2 * channels))
         return x
 
     def unpatchify(self, x: Tensor) -> Tensor:
@@ -265,7 +266,7 @@ class FCMAE(nn.Module):
         return pred
 
     def forward_loss(
-        self, imgs_dict: Dict[AnyStr, Tensor], preds: Dict[AnyStr, Tensor], mask: Tensor
+            self, imgs_dict: Dict[AnyStr, Tensor], preds: Dict[AnyStr, Tensor], mask: Tensor
     ) -> Tuple[Tensor, Dict, Tensor, Tensor]:
         """
         imgs_dict: A dict of different modalities, each with shape of [N, C, H, W], C is the number of channels/bands
@@ -312,7 +313,7 @@ class FCMAE(nn.Module):
                 # pred is of the shape [N, L, C] where C is patch_size**2 * num_classes. we need to first convert this to [N, L, patch_size**2, num_classes]
                 # L is the number of patches
                 pred = pred.reshape(
-                    pred.shape[0], pred.shape[1], self.patch_size**2, -1
+                    pred.shape[0], pred.shape[1], self.patch_size ** 2, -1
                 )
 
                 target = self.patchify(imgs, modality)
@@ -324,10 +325,10 @@ class FCMAE(nn.Module):
                 # we need to apply the mask on target and pred for every channel
 
                 target = target.reshape(
-                    target.shape[0], target.shape[1], self.patch_size**2, -1
+                    target.shape[0], target.shape[1], self.patch_size ** 2, -1
                 )
                 mask_tmp = (
-                    mask.unsqueeze(-1).repeat(1, 1, self.patch_size**2).unsqueeze(-1)
+                    mask.unsqueeze(-1).repeat(1, 1, self.patch_size ** 2).unsqueeze(-1)
                 )
 
                 target = target.reshape(target.shape[0], -1)
@@ -375,7 +376,7 @@ class FCMAE(nn.Module):
                 target = self.patchify(imgs, modality)
 
                 if (
-                    self.norm_pix_loss and modality == "sentinel2"
+                        self.norm_pix_loss and modality == "sentinel2"
                 ):  # we only compute the per-patch norm on sentinel2
                     mean = target.mean(dim=-1, keepdim=True)
                     var = target.var(dim=-1, keepdim=True)
@@ -412,7 +413,7 @@ class FCMAE(nn.Module):
             return loss_combined, loss_dict, None, None
 
     def forward(
-        self, imgs_dict: Dict[AnyStr, Tensor], labels=None, mask_ratio: float = 0.6
+            self, imgs_dict: Dict[AnyStr, Tensor], labels=None, mask_ratio: float = 0.6
     ):
 
         # apply random crop to all pixel-wise modalities
