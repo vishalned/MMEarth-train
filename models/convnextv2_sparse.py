@@ -8,9 +8,7 @@
 
 import torch
 import torch.nn as nn
-from MinkowskiOps import (
-    to_sparse,
-)
+
 from timm.models.layers import trunc_normal_
 from torch import Tensor
 
@@ -19,6 +17,9 @@ from MinkowskiEngine import (
     MinkowskiDepthwiseConvolution,
     MinkowskiLinear,
     MinkowskiGELU,
+)
+from MinkowskiOps import (
+    to_sparse,
 )
 from .sparse_norm_layers import MinkowskiLayerNorm, MinkowskiGRN, MinkowskiDropPath
 
