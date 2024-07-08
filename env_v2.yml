@@ -1,13 +1,15 @@
-name: mmearth
+name: mmearthv2
 channels:
   - pytorch
   - nvidia
   - conda-forge
   - defaults
+  - anaconda
 dependencies:
-  - python=3.9
-  - pytorch::pytorch=1.12.1
-  - cudatoolkit=11.3
+  - python=3.10
+  - pytorch::pytorch
+  - pytorch::pytorch-cuda=11.8
+  - mkl==2024.0
   - torchvision
   - tqdm
   - numpy
@@ -27,15 +29,12 @@ dependencies:
   - pkg-config
   - libjpeg-turbo
   - conda-forge::opencv
-  - ipykernel
-  - jupyterlab
   - tensorboard
   - tensorboardx
   - ninja
   - pytest
   - kornia
-  - setuptools=69.5.1
-  - mkl=2024.0
+  - setuptools<=69.5.1
   - pip
   - pip:
       - ipdb
