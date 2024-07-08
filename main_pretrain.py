@@ -201,6 +201,9 @@ def main(args):
 
     device = torch.device(args.device)
 
+    # Set high precision for matrix multiplication in PyTorch
+    torch.set_float32_matmul_precision("high")
+
     # fix the seed for reproducibility
     seed = args.seed + helpers.get_rank()
     torch.manual_seed(seed)
