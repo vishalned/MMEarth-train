@@ -39,15 +39,26 @@ class multimodal_dataset(Dataset):
         self.norm_stats = args.band_stats # mean, std, min and max of each band
 
     def transform_random_crop(self, return_dict, random_crop_size=112):
-        # applying random crop for every modality
+        pixel_based_modalities = [
+            "sentinel2",
+            "sentinel1",
+            "aster",
+            "canopy_height_eth",
+            "dynamic_world",
+            "esa_worldcover",
+        ]
+
+        crop_params = None
+
         for modality in return_dict:
-            # we only random crop for pixel based modalities
-            if modality in ['sentinel2', 'sentinel1', 'aster', 'canopy_height_eth', 'dynamic_world', 'esa_worldcover']:
-                c, h, w = return_dict[modality].shape
-                i, j, h, w = transforms.RandomCrop.get_params(return_dict[modality], output_size=(random_crop_size, random_crop_size))
-                return_dict[modality] = TF.crop(return_dict[modality], i, j, h, w)
-            else:
-                return_dict[modality] = return_dict[modality]
+            if modality in pixel_based_modalities:
+                if crop_params is None:
+                    c, h, w = return_dict[modality].shape
+                    crop_params = transforms.RandomCrop.get_params(
+                        return_dict[modality],
+                        output_size=(random_crop_size, random_crop_size),
+                    )
+                return_dict[modality] = TF.crop(return_dict[modality], *crop_params)
         return return_dict
 
     def _open_hdf5(self, path):
