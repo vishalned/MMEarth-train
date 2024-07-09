@@ -63,7 +63,7 @@ def train_one_epoch(
             samples, targets = mixup_fn(samples, targets)
 
         with torch.autocast(
-            device_type=device.__str__(), dtype=torch.bfloat16, enabled=use_amp
+            device_type=device.type, dtype=torch.bfloat16, enabled=use_amp
         ):
             output = model(samples)
             if (
