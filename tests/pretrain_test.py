@@ -30,6 +30,7 @@ def test_mmearth_pretrain(args, mod_setting):
     test_out = Path("test_out")
     test_out.mkdir(exist_ok=False)
     args.mod_setting = mod_setting
+    args.processed_dir = test_out
 
     try:
         main(args)
