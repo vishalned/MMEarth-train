@@ -28,7 +28,7 @@ GEOBENCH_TASK = {
 }
 
 
-def get_band_names(version="0.9.1"):
+def get_band_names(version="1.0"):
     if version == "1.0":
         with open("BAND_NAMES_v1.json", "r") as f:
             return json.load(f)
@@ -46,7 +46,7 @@ class GeobenchDataset(Dataset):
         split="train",
         transform=None,
         partition: str = "default",
-        version: str = "0.9.1",
+        version: str = "1.0",
     ):
         if split == "val":
             split = "valid"
@@ -158,7 +158,7 @@ def get_geobench_dataloaders(
     no_ffcv: bool = False,
     indices: list[list[int]] = None,
     distributed: bool = False,
-    version: str = "0.9.1",
+    version: str = "1.0",
 ) -> Tuple[list[ffcv.Loader], TaskSpecifications]:
     """
     Creates and returns data loaders for the GeobenchDataset dataset. If the processed beton file does not exist,
@@ -298,7 +298,7 @@ def get_geobench_dataloaders(
                     "label": [
                         IntDecoder(),
                         ToTensor(),
-                        Squeeze([1]),
+                        Squeeze(1),
                     ],
                 }
             )

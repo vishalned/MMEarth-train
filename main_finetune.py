@@ -379,7 +379,7 @@ def get_args_parser():
     )
     parser.add_argument("--test_scores_dir", type=str, default="./test_scores/")
     parser.add_argument("--debug", type=str2bool, default=False)
-    parser.add_argument("--version", type=str, default="0.9.1")
+    parser.add_argument("--version", type=str, default="1.0", help="Version of geobench datasets.", choices=["1.0", "0.9.1"])
     return parser
 
 
@@ -411,6 +411,9 @@ def main(args: argparse.Namespace):
     )
     num_classes = task.label_type.n_classes
     in_channels = len(task.band_stats) - 1 # without label
+    print("num_classes: ", num_classes)
+    print("in_channels: ", in_channels)
+    
     num_tasks = helpers.get_world_size()
     global_rank = helpers.get_rank()
 
@@ -1010,7 +1013,8 @@ if __name__ == "__main__":
             "data_set": args.data_set,
             "linear_probe": args.linear_probe,
         }
-        wandb.init(project=args.wandb_project, config=config)
+        wandb.init(project=args.wandb_project, config=config,
+                   mode="online")    # set to "online" "offline" "disabled"
         wandb.run.name = args.wandb_run_name
 
     main(args)
