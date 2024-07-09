@@ -8,9 +8,7 @@
 
 import torch
 import torch.nn as nn
-from MinkowskiOps import (
-    to_sparse,
-)
+
 from timm.models.layers import trunc_normal_
 from torch import Tensor
 
@@ -20,8 +18,15 @@ from MinkowskiEngine import (
     MinkowskiLinear,
     MinkowskiGELU,
 )
+import MinkowskiEngine as ME
+from MinkowskiOps import (
+    to_sparse,
+)
 from .sparse_norm_layers import MinkowskiLayerNorm, MinkowskiGRN, MinkowskiDropPath
 
+# set to speed optimized as default
+ME.set_global_coordinate_manager(ME.CoordinateManager(D=2, minkowski_algorithm=ME.MinkowskiAlgorithm.SPEED_OPTIMIZED))
+ME.set_gpu_allocator(ME.GPUMemoryAllocatorType.CUDA)
 
 class Block(nn.Module):
     """Sparse ConvNeXtV2 Block.
@@ -77,7 +82,7 @@ class SparseConvNeXtV2(nn.Module):
         depths: list[int] = None,
         dims: list[int] = None,
         drop_path_rate: float = 0.0,
-        D: int = 3,
+        D: int = 2,
         use_orig_stem: bool = False,
     ):
         super().__init__()
@@ -196,7 +201,7 @@ class SparseConvNeXtV2(nn.Module):
         mask = mask.unsqueeze(1).type_as(x)
         x *= 1.0 - mask
 
-        x = to_sparse(x)
+        x = to_sparse(x, coordinates=ME.global_coordinate_manager())
 
         # patch embedding
         if self.use_orig_stem:

@@ -8,7 +8,6 @@
 
 import argparse
 import datetime
-import json
 import time
 
 import numpy as np
@@ -148,7 +147,7 @@ def get_args_parser():
     parser.add_argument(
         "--world_size", default=1, type=int, help="number of distributed processes"
     )
-    parser.add_argument("--local_rank", default=-1, type=int)
+    parser.add_argument("--local-rank", default=-1, type=int)
     parser.add_argument("--dist_on_itp", type=str2bool, default=False)
     parser.add_argument(
         "--dist_url", default="env://", help="url used to set up distributed training"
@@ -156,14 +155,12 @@ def get_args_parser():
     parser.add_argument("--use_mixed", type=str2bool, default=False)
     parser.add_argument("--sparse", type=str2bool, default=True)
     parser.add_argument("--debug", type=str2bool, default=False)
-    parser.add_argument("--distributed", type=str2bool, default=False)
 
     return parser
 
 
 def main(args):
-    if args.distributed:
-        helpers.init_distributed_mode(args)
+    args = helpers.init_distributed_mode(args)
     print(args)
 
     args.data_dir = Path(args.data_dir)
@@ -177,13 +174,12 @@ def main(args):
     args.modalities_full = MODALITIES_FULL
     #################################################################################################
 
-    if args.wandb and args.local_rank == 0:
+    if args.wandb and (args.local_rank == 0 or not args.distributed):
         print("Logging to wandb")
         config = {
             "model": args.model,
             "mask_ratio": args.mask_ratio,
             "norm_pix_loss": args.norm_pix_loss,
-            "loss_type": args.loss_type,
             "loss_aggr": args.loss_aggr,
             "loss_full": args.loss_full,
             "patch_size": args.patch_size,
@@ -192,13 +188,21 @@ def main(args):
             "batch_size": args.batch_size,
             "update_freq": args.update_freq,
             "use_orig_stem": args.use_orig_stem,
+            "weight_decay": args.weight_decay,
+            "sparse": args.sparse,
             "use_mixed": args.use_mixed,
         }
 
         wandb.init(project=args.wandb_project, config=config)
         wandb.run.name = args.wandb_run_name
 
-    device = torch.device(args.device)
+    if args.distributed and args.device == "cuda":
+        device = torch.device(f"cuda:{args.gpu}")
+    else:
+        device = torch.device(args.device)
+
+    # Set high precision for matrix multiplication in PyTorch
+    torch.set_float32_matmul_precision("high")
 
     # fix the seed for reproducibility
     seed = args.seed + helpers.get_rank()
@@ -277,7 +281,7 @@ def main(args):
 
     if args.distributed:
         model = torch.nn.parallel.DistributedDataParallel(
-            model, device_ids=[args.gpu], find_unused_parameters=False
+            model, device_ids=[args.gpu] if args.device != "cpu" else None, find_unused_parameters=True
         )
         model_without_ddp = model.module
 
@@ -360,6 +364,8 @@ def main(args):
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print("Training time {}".format(total_time_str))
     wandb.finish()
+    if args.distributed:
+        torch.distributed.destroy_process_group()
 
 
 if __name__ == "__main__":
