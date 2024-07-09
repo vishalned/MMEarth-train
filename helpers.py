@@ -368,6 +368,7 @@ def init_distributed_mode(args):
 
     args.distributed = True
 
+    torch.cuda.set_device(args.gpu)
     CUDA_VISIBLE_DEVICES = int(os.environ["LOCAL_RANK"])
     print("CUDA_VISIBLE_DEVICES", CUDA_VISIBLE_DEVICES)
 
