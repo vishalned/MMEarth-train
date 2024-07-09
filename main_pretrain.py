@@ -126,6 +126,10 @@ def get_args_parser():
     parser.add_argument('--dist_on_itp', type=str2bool, default=False)
     parser.add_argument('--dist_url', default='env://',
                         help='url used to set up distributed training')
+
+    # modality parameters
+    parser.add_argument('--mod_setting', choices=['s2_only', 's2_rgb', 'None', 'full'], default='None', 
+                        help='Modality input, output setting. Used for slurm execution')
     
     return parser
 
@@ -138,8 +142,13 @@ def main(args):
     print(args)
 
     ############# creating some additional args variables to be used by other functions #############
-    args.inp_modalities = INP_MODALITIES
-    args.out_modalities = OUT_MODALITIES
+    if args.mod_setting != "None":
+        args.inp_modalities = MOD_DICT[args.mod_setting]["INP_MODALITIES"]
+        args.out_modalities = MOD_DICT[args.mod_setting]["OUT_MODALITIES"]
+    else:
+        args.inp_modalities = INP_MODALITIES
+        args.out_modalities = OUT_MODALITIES
+        
     args.modalities = args.inp_modalities.copy()
     args.modalities.update(args.out_modalities)
 
@@ -174,7 +183,7 @@ def main(args):
             'model': args.model ,
             'mask_ratio': args.mask_ratio,
             'norm_pix_loss': args.norm_pix_loss,
-            'loss_type': args.loss_type,
+            # 'loss_type': args.loss_type,
             'loss_aggr': args.loss_aggr,
             'loss_full': args.loss_full,
             'patch_size': args.patch_size,
