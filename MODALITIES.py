@@ -43,6 +43,43 @@ NO_DATA_VAL = {
     'eco_region': 65535
 }
 
+MOD_DICT = {
+    's2_only':{
+        'INP_MODALITIES': {
+            'sentinel2': ['B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B8A', 'B8', 'B9', 'B11', 'B12'],
+        },
+        'OUT_MODALITIES': {
+            'sentinel2': ['B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B8A', 'B8', 'B9', 'B11', 'B12'],
+        }
+    },
+    's2_rgb':{
+        'INP_MODALITIES': {
+            'sentinel2': ['B2', 'B3', 'B4'],
+        },
+        'OUT_MODALITIES': {
+            'sentinel2': ['B2', 'B3', 'B4'],
+        }
+    },
+    'full':{
+        'INP_MODALITIES': {
+            'sentinel2': ['B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B8A', 'B8', 'B9', 'B11', 'B12'],
+        },
+        'OUT_MODALITIES': {
+            'sentinel2': ['B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B8A', 'B8', 'B9', 'B11', 'B12'],
+            'sentinel1': 'all',
+            'aster': 'all',
+            'era5': 'all',
+            'dynamic_world': 'all',
+            'canopy_height_eth': 'all',
+            'lat': 'all',
+            'lon': 'all',
+            'biome': 'all',
+            'eco_region': 'all',
+            'month': 'all',
+            'esa_worldcover': 'all'
+        }
+    }
+}
 
 
 # Input modalities for training
