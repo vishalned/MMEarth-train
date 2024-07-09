@@ -334,7 +334,6 @@ def save_on_master(*args, **kwargs):
 
 
 def init_distributed_mode(args):
-
     if args.dist_on_itp:
         args.rank = int(os.environ["OMPI_COMM_WORLD_RANK"])
         args.world_size = int(os.environ["OMPI_COMM_WORLD_SIZE"])
@@ -364,15 +363,18 @@ def init_distributed_mode(args):
     else:
         print("Not using distributed mode")
         args.distributed = False
-        return
+        args.gpu = 0
+        return args
 
     args.distributed = True
-    # exit()
-    torch.cuda.set_device(args.gpu)
+
     CUDA_VISIBLE_DEVICES = int(os.environ["LOCAL_RANK"])
     print("CUDA_VISIBLE_DEVICES", CUDA_VISIBLE_DEVICES)
 
-    args.dist_backend = "nccl"
+    if args.device == "cpu":
+        args.dist_backend = "gloo"
+    else:
+        args.dist_backend = "nccl"
     print(
         "| distributed init (rank {}): {}, gpu {}".format(
             args.rank, args.dist_url, args.gpu
@@ -387,12 +389,13 @@ def init_distributed_mode(args):
     )
     torch.distributed.barrier(device_ids=[CUDA_VISIBLE_DEVICES])
     setup_for_distributed(args.rank == 0)
+    return args
 
 
-def all_reduce_mean(x):
+def all_reduce_mean(x, device):
     world_size = get_world_size()
     if world_size > 1:
-        x_reduce = torch.tensor(x).cuda()
+        x_reduce = torch.tensor(x).to(device)
         dist.all_reduce(x_reduce)
         x_reduce /= world_size
         return x_reduce.item()
@@ -401,7 +404,7 @@ def all_reduce_mean(x):
 
 
 def load_state_dict(
-    model, state_dict, prefix="", ignore_missing="relative_position_index"
+        model, state_dict, prefix="", ignore_missing="relative_position_index"
 ):
     missing_keys = []
     unexpected_keys = []
@@ -469,17 +472,17 @@ def load_state_dict(
 class NativeScalerWithGradNormCount:
     state_dict_key = "amp_scaler"
 
-    def __init__(self, device:str):
-        self._scaler = torch.cuda.amp.GradScaler(enabled=device!="cpu")
+    def __init__(self, device: str):
+        self._scaler = torch.cuda.amp.GradScaler(enabled=device != "cpu")
 
     def __call__(
-        self,
-        loss,
-        optimizer,
-        clip_grad=None,
-        parameters=None,
-        create_graph=False,
-        update_grad=True,
+            self,
+            loss,
+            optimizer,
+            clip_grad=None,
+            parameters=None,
+            create_graph=False,
+            update_grad=True,
     ):
         self._scaler.scale(loss).backward(create_graph=create_graph)
         if update_grad:
@@ -526,14 +529,14 @@ def get_grad_norm_(parameters, norm_type: float = 2.0) -> torch.Tensor:
 
 
 def save_model(
-    args,
-    epoch,
-    model,
-    model_without_ddp,
-    optimizer,
-    loss_scaler,
-    model_ema=None,
-    best=False,
+        args,
+        epoch,
+        model,
+        model_without_ddp,
+        optimizer,
+        loss_scaler,
+        model_ema=None,
+        best=False,
 ):
     output_dir = Path(args.output_dir)
     epoch_name = str(epoch)
@@ -565,7 +568,7 @@ def save_model(
 
 
 def auto_load_model(
-    args, model, model_without_ddp, optimizer, loss_scaler, model_ema=None
+        args, model, model_without_ddp, optimizer, loss_scaler, model_ema=None
 ):
     output_dir = Path(args.output_dir)
     if args.auto_resume and len(args.resume) == 0:
@@ -594,7 +597,7 @@ def auto_load_model(
         if "optimizer" in checkpoint and "epoch" in checkpoint:
             optimizer.load_state_dict(checkpoint["optimizer"])
             if not isinstance(
-                checkpoint["epoch"], str
+                    checkpoint["epoch"], str
             ):  # does not support resuming with 'best', 'best-ema'
                 args.start_epoch = checkpoint["epoch"] + 1
             else:
@@ -610,13 +613,13 @@ def auto_load_model(
 
 
 def cosine_scheduler(
-    base_value,
-    final_value,
-    epochs,
-    niter_per_ep,
-    warmup_epochs=0,
-    start_warmup_value=0,
-    warmup_steps=-1,
+        base_value,
+        final_value,
+        epochs,
+        niter_per_ep,
+        warmup_epochs=0,
+        start_warmup_value=0,
+        warmup_steps=-1,
 ):
     warmup_schedule = np.array([])
     warmup_iters = warmup_epochs * niter_per_ep
@@ -649,12 +652,12 @@ def adjust_learning_rate(optimizer, epoch, args):
         lr = args.lr * epoch / args.warmup_epochs
     else:
         lr = args.min_lr + (args.lr - args.min_lr) * 0.5 * (
-            1.0
-            + math.cos(
-                math.pi
-                * (epoch - args.warmup_epochs)
-                / (args.epochs - args.warmup_epochs)
-            )
+                1.0
+                + math.cos(
+            math.pi
+            * (epoch - args.warmup_epochs)
+            / (args.epochs - args.warmup_epochs)
+        )
         )
     for param_group in optimizer.param_groups:
         if "lr_scale" in param_group:
@@ -787,7 +790,7 @@ def visualize_segmentation(model, dataloader, device, args, epoch):
 
 
 def make_modality_dict(
-    data: List[Union[Tensor]], modalities: OrderedDict[AnyStr, List]
+        data: List[Union[Tensor]], modalities: OrderedDict[AnyStr, List]
 ) -> Dict[AnyStr, Tensor]:
     return_dict = {}
     for i, modality in enumerate(modalities):

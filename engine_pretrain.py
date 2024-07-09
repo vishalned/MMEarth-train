@@ -17,16 +17,16 @@ import helpers
 
 
 def train_one_epoch(
-    model: torch.nn.Module,
-    modalities: Dict[AnyStr,List],
-    data_loader: ffcv.Loader,
-    optimizer: torch.optim.Optimizer,
-    device: torch.device,
-    epoch: int,
-    use_mixed: bool,
-    loss_scaler,
-    log_writer=None,
-    args=None,
+        model: torch.nn.Module,
+        modalities: Dict[AnyStr, List],
+        data_loader: ffcv.Loader,
+        optimizer: torch.optim.Optimizer,
+        device: torch.device,
+        epoch: int,
+        use_mixed: bool,
+        loss_scaler,
+        log_writer=None,
+        args=None,
 ):
     model.train()
     metric_logger = helpers.MetricLogger(delimiter="  ")
@@ -40,7 +40,7 @@ def train_one_epoch(
 
     optimizer.zero_grad()
     for data_iter_step, data in enumerate(
-        metric_logger.log_every(data_loader, print_freq, header)
+            metric_logger.log_every(data_loader, print_freq, header)
     ):
 
         samples = helpers.make_modality_dict(data, modalities)
@@ -97,7 +97,7 @@ def train_one_epoch(
         lr = optimizer.param_groups[0]["lr"]
         metric_logger.update(lr=lr)
 
-        loss_value_reduce = helpers.all_reduce_mean(loss_value)
+        loss_value_reduce = helpers.all_reduce_mean(loss_value, device)
         if log_writer is not None and (data_iter_step + 1) % update_freq == 0:
             """We use epoch_1000x as the x-axis in tensorboard.
             This calibrates different curves when batch size changes.

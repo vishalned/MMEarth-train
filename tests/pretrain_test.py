@@ -19,7 +19,7 @@ def args():
     return args
 
 
-def test_mmearth_dataloader(args):
+def test_mmearth_pretrain(args):
     test_out = Path("test_out")
     test_out.mkdir(exist_ok=False)
 
