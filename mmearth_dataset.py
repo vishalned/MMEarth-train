@@ -9,7 +9,9 @@ import h5py
 import numpy as np
 from ffcv import DatasetWriter
 from ffcv.fields import NDArrayField
+from ffcv.fields.ndarray import NDArrayDecoder
 from ffcv.loader import OrderOption
+from ffcv.transforms import ToTensor
 from torch.utils.data import Dataset
 
 import MODALITIES
