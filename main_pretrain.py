@@ -140,6 +140,8 @@ def get_args_parser():
     )
     parser.add_argument("--num_workers", default=10, type=int)
 
+    parser.add_argument("--mod_setting", type=str, default="full")
+
     # Evaluation parameters
     parser.add_argument("--crop_pct", type=float, default=None)
 
@@ -166,8 +168,7 @@ def main(args):
     args.data_dir = Path(args.data_dir)
 
     ############# creating some additional args variables to be used by other functions #############
-    args.inp_modalities = INP_MODALITIES
-    args.out_modalities = OUT_MODALITIES
+    args.inp_modalities, args.out_modalities = MOD_SETTINGS[args.mod_setting]
     args.modalities = args.inp_modalities.copy()
     args.modalities.update(args.out_modalities)
 
@@ -281,7 +282,9 @@ def main(args):
 
     if args.distributed:
         model = torch.nn.parallel.DistributedDataParallel(
-            model, device_ids=[args.gpu] if args.device != "cpu" else None, find_unused_parameters=not args.sparse
+            model,
+            device_ids=[args.gpu] if args.device != "cpu" else None,
+            find_unused_parameters=not args.sparse,
         )
         model_without_ddp = model.module
 

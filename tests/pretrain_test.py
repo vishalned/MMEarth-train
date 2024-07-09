@@ -18,10 +18,18 @@ def args():
 
     return args
 
-
-def test_mmearth_pretrain(args):
+@pytest.mark.parametrize(
+    "mod_setting",
+    [
+        "full",
+        "s2_only",
+        "s2_rgb"
+    ],
+)
+def test_mmearth_pretrain(args, mod_setting):
     test_out = Path("test_out")
     test_out.mkdir(exist_ok=False)
+    args.mod_setting = mod_setting
 
     try:
         main(args)

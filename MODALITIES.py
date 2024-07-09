@@ -101,6 +101,12 @@ OUT_MODALITIES = {
     "esa_worldcover": "all",
 }
 
+MOD_SETTINGS = {
+    "full": (INP_MODALITIES, OUT_MODALITIES),
+    "s2_rgb": (RGB_MODALITIES, RGB_MODALITIES),
+    "s2_only": (INP_MODALITIES, INP_MODALITIES),
+}
+
 # an example of all the modalities. DO NOT CHANGE THIS, ALWAYS CHANGE THE MODALITIES ABOVE
 MODALITIES_FULL = {
     "sentinel2": [
