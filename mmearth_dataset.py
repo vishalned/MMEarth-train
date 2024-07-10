@@ -249,7 +249,7 @@ def get_mmearth_dataloaders(
     if processed_dir is None:
         processed_dir = data_dir
     else:
-        processed_dir.mkdir(exist_ok=True)
+        Path(processed_dir).mkdir(exist_ok=True)
 
     dataloaders = []
     for i, split in enumerate(splits):
