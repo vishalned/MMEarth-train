@@ -21,6 +21,7 @@ from timm.utils import get_state_dict
 
 try:
     from torch._six import inf
+    from torch import Tensor
 except ModuleNotFoundError:  # for newer pytorch versions
     from torch import inf, Tensor
 
@@ -361,7 +362,7 @@ def init_distributed_mode(args):
         os.environ["LOCAL_RANK"] = str(args.gpu)
         os.environ["WORLD_SIZE"] = str(args.world_size)
     else:
-        print("Not using distributed mode")
+        print("---------- Not using distributed mode -------- ")
         args.distributed = False
         return
 

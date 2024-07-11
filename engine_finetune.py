@@ -62,8 +62,8 @@ def train_one_epoch(
         if mixup_fn is not None:
             samples, targets = mixup_fn(samples, targets)
 
-        with torch.autocast(
-            device_type=device.__str__(), dtype=torch.float16, enabled=use_amp
+        with torch.cuda.amp.autocast(
+            enabled=use_amp
         ):
             output = model(samples)
             if (
@@ -227,8 +227,8 @@ def evaluate(data_loader, model, device, use_amp=False, args=None):
         target = target.to(device, non_blocking=True)
 
         # compute output
-        with torch.autocast(
-            device_type=device.__str__(), dtype=torch.float16, enabled=use_amp
+        with torch.cuda.amp.autocast(
+            enabled=use_amp
         ):
             output = model(images)
             if isinstance(output, dict):

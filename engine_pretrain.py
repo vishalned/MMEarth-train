@@ -56,7 +56,7 @@ def train_one_epoch(
                 for key in samples:
                     samples[key] = samples[key].to(device, non_blocking=True)
 
-        with torch.autocast(device_type=device.__str__(), dtype=torch.float16, enabled=use_mixed):
+        with torch.cuda.amp.autocast(enabled=use_mixed):
             loss, pred, mask, loss_dict_, log_var_list_, normalized_loss_list_ = model(
                 samples, mask_ratio=args.mask_ratio
             )

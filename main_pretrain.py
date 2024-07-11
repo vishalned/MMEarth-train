@@ -162,6 +162,10 @@ def get_args_parser():
 
 
 def main(args):
+
+
+
+
     if args.distributed:
         helpers.init_distributed_mode(args)
     print(args)
@@ -177,13 +181,13 @@ def main(args):
     args.modalities_full = MODALITIES_FULL
     #################################################################################################
 
-    if args.wandb and args.local_rank == 0:
+    if (args.wandb and args.local_rank == 0) or (args.wandb and args.distributed == False):
         print("Logging to wandb")
         config = {
             "model": args.model,
             "mask_ratio": args.mask_ratio,
             "norm_pix_loss": args.norm_pix_loss,
-            "loss_type": args.loss_type,
+            # "loss_type": args.loss_type,
             "loss_aggr": args.loss_aggr,
             "loss_full": args.loss_full,
             "patch_size": args.patch_size,
@@ -338,7 +342,7 @@ def main(args):
             "n_parameters": n_parameters,
         }
 
-        if args.wandb and helpers.is_main_process():
+        if (args.wandb and helpers.is_main_process()) or (args.wandb and args.distributed == False):
             # we also log multiple loss values and log_var values if its not None
             loss_dict_keys = []
             for k, v in loss_dict.items():

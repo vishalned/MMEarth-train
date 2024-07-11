@@ -1,0 +1,78 @@
+{
+  "m-eurosat": [
+    "01 - Coastal aerosol",
+    "02 - Blue",
+    "03 - Green",
+    "04 - Red",
+    "05 - Vegetation Red Edge",
+    "06 - Vegetation Red Edge",
+    "07 - Vegetation Red Edge",
+    "08 - NIR",
+    "08A - Vegetation Red Edge",
+    "09 - Water vapour",
+    "11 - SWIR",
+    "12 - SWIR"
+  ],
+  "m-so2sat": [
+    "02 - Blue",
+    "02 - Blue",
+    "03 - Green",
+    "04 - Red",
+    "05 - Vegetation Red Edge",
+    "06 - Vegetation Red Edge",
+    "07 - Vegetation Red Edge",
+    "08 - NIR",
+    "08A - Vegetation Red Edge",
+    "08A - Vegetation Red Edge",
+    "11 - SWIR",
+    "12 - SWIR"
+  ],
+  "m-brick-kiln": [
+    "04 - Red",
+    "03 - Green",
+    "02 - Blue"
+  ],
+  "m-bigearthnet": [
+    "01 - Coastal aerosol",
+    "02 - Blue",
+    "03 - Green",
+    "04 - Red",
+    "05 - Vegetation Red Edge",
+    "06 - Vegetation Red Edge",
+    "07 - Vegetation Red Edge",
+    "08 - NIR",
+    "08A - Vegetation Red Edge",
+    "09 - Water vapour",
+    "11 - SWIR",
+    "12 - SWIR"
+  ],
+  "m-cashew-plant": [
+    "01 - Coastal aerosol",
+    "02 - Blue",
+    "03 - Green",
+    "04 - Red",
+    "05 - Vegetation Red Edge",
+    "06 - Vegetation Red Edge",
+    "07 - Vegetation Red Edge",
+    "08 - NIR",
+    "08A - Vegetation Red Edge",
+    "09 - Water vapour",
+    "11 - SWIR",
+    "12 - SWIR"
+  ],
+  "m-SA-crop-type": [
+    "01 - Coastal aerosol",
+    "02 - Blue",
+    "03 - Green",
+    "04 - Red",
+    "05 - Vegetation Red Edge",
+    "06 - Vegetation Red Edge",
+    "07 - Vegetation Red Edge",
+    "08 - NIR",
+    "08A - Vegetation Red Edge",
+    "09 - Water vapour",
+    "11 - SWIR",
+    "12 - SWIR"
+  ]
+}
+

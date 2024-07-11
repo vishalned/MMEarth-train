@@ -13,7 +13,7 @@
 ############################################################################################################
 
 
-pretraining=s2_12-patch16-ip112-newstem
+pretraining=100k-v001
 datasets=("m-so2sat" "m-bigearthnet")
 linear_probe=True
 output_dir_base="/projects/dereeco/data/global-lr/ConvNeXt-V2/results"
@@ -58,12 +58,12 @@ python -m main_finetune \
     --mixup 0. \
     --cutmix 0. \
     --smoothing 0.2 \
-    --finetune /projects/dereeco/data/global-lr/ConvNeXt-V2/results/pt-s2rgb-patch16-ip112-newstem/checkpoint-199.pth \
+    --finetune /projects/dereeco/data/global-lr/ConvNeXt-V2/results_v001/pt-100k-v001/checkpoint-140.pth \
     --output_dir "$output_dir" \
     --data_set "$dataset" \
     --linear_probe "$linear_probe" \
     --pretraining "$pretraining"\
-    --wandb True \
+    --wandb False \
     --wandb_run_name "testing-$task_type--$dataset--$pretraining" \
     --auto_resume False \
     --patch_size 16 \

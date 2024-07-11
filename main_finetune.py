@@ -317,7 +317,7 @@ def get_args_parser():
             "m-so2sat",
             "m-bigearthnet",
             "m-brick-kiln",
-            "m-cashew-plantation",
+            "m-cashew-plant",
             "m-SA-crop-type",
         ],
         type=str,
@@ -380,6 +380,7 @@ def get_args_parser():
     parser.add_argument("--test_scores_dir", type=str, default="./test_scores/")
     parser.add_argument("--debug", type=str2bool, default=False)
     parser.add_argument("--version", type=str, default="0.9.1")
+    parser.add_argument("--nb_classes", default=10, type=int)
     return parser
 
 
@@ -410,7 +411,11 @@ def main(args: argparse.Namespace):
         version=args.version,
     )
     num_classes = task.label_type.n_classes
-    in_channels = len(task.band_stats) - 1 # without label
+    # in_channels = len(task.band_stats) - 1 # without label
+    samples, targets, _, _ = next(iter(train_dataloader))
+    in_channels = samples.shape[1]
+    print(num_classes, in_channels)
+    args.nb_classes = num_classes
     num_tasks = helpers.get_world_size()
     global_rank = helpers.get_rank()
 
