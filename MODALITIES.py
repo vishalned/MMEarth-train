@@ -101,10 +101,57 @@ OUT_MODALITIES = {
     "esa_worldcover": "all",
 }
 
+OUT_MODALITIES_PIX = {
+    "sentinel2": [
+        "B1",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8A",
+        "B8",
+        "B9",
+        "B11",
+        "B12",
+    ],
+    "sentinel1": "all",
+    "aster": "all",
+    "dynamic_world": "all",
+    "canopy_height_eth": "all",
+    "esa_worldcover": "all",
+}
+
+OUT_MODALITIES_IMG = {
+    "sentinel2": [
+        "B1",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8A",
+        "B8",
+        "B9",
+        "B11",
+        "B12",
+    ],
+    "era5": "all",
+    "lat": "all",
+    "lon": "all",
+    "biome": "all",
+    "eco_region": "all",
+    "month": "all",
+}
+
 MOD_SETTINGS = {
     "full": (INP_MODALITIES, OUT_MODALITIES),
     "s2_rgb": (RGB_MODALITIES, RGB_MODALITIES),
     "s2_only": (INP_MODALITIES, INP_MODALITIES),
+    "pix": (INP_MODALITIES, OUT_MODALITIES_PIX),
+    "img": (INP_MODALITIES, OUT_MODALITIES_IMG),
 }
 
 # an example of all the modalities. DO NOT CHANGE THIS, ALWAYS CHANGE THE MODALITIES ABOVE
