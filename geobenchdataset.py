@@ -159,6 +159,7 @@ def get_geobench_dataloaders(
     indices: list[list[int]] = None,
     distributed: bool = False,
     version: str = "0.9.1",
+    geobench_bands_type: str = "full",
 ) -> Tuple[list[ffcv.Loader], TaskSpecifications]:
     """
     Creates and returns data loaders for the GeobenchDataset dataset. If the processed beton file does not exist,
@@ -233,7 +234,15 @@ def get_geobench_dataloaders(
     for i, split in enumerate(splits):
         is_train = split == "train"
         subset = "" if indices is None else "_subset"
-        beton_file = processed_dir / f"{split}_{dataset_name}_{partition}{subset}_rgb.beton"
+        
+        bands_type = "" if geobench_bands_type == "full" else f"_{geobench_bands_type}"
+        # we check to make sure the number of bands is correct
+        if geobench_bands_type == "rgb" or geobench_bands_type == "bgr":
+            assert len(get_band_names(version)[dataset_name]) == 3
+        elif geobench_bands_type == "full":
+            assert len(get_band_names(version)[dataset_name]) == 12
+
+        beton_file = processed_dir / f"{split}_{dataset_name}_{partition}{subset}{bands_type}.beton"
 
         if not beton_file.exists() or no_ffcv:
             print(

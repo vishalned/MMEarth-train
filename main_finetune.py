@@ -377,6 +377,23 @@ def get_args_parser():
         'Available: "default", "0.01x_train", "0.02x_train", "0.05x_train", "0.10x_train", '
         '"0.20x_train", "0.50x_train", "1.00x_train" (default: "default").',
     )
+
+    # a parameter to specify if we use geobench rgb, bgr, or full bands
+    parser.add_argument(
+        "--geobench_bands_type",
+        type=str,
+        default="full",
+        choices=["full", "rgb", "bgr"],
+        help="Type of bands to use for GeoBench dataset. "
+        'Available: "full", "rgb", "bgr" (default: "full").',
+    )
+    
+    parser.add_argument(
+        "--use_imnet_weights",
+        type=str2bool,
+        default=False,
+        help="Use ImageNet pretrained weights for the model",
+    )
     parser.add_argument("--test_scores_dir", type=str, default="./test_scores/")
     parser.add_argument("--debug", type=str2bool, default=False)
     parser.add_argument("--version", type=str, default="0.9.1")
@@ -409,15 +426,23 @@ def main(args: argparse.Namespace):
         args.partition,
         indices=[list(range(10)), list(range(10))] if args.debug else None,
         version=args.version,
+        geobench_bands_type=args.geobench_bands_type,
     )
     num_classes = task.label_type.n_classes
     # in_channels = len(task.band_stats) - 1 # without label
     samples, targets, _, _ = next(iter(train_dataloader))
     in_channels = samples.shape[1]
-    print(num_classes, in_channels)
+    print('in_channels:', in_channels)
+    print('num_classes:', num_classes)
     args.nb_classes = num_classes
     num_tasks = helpers.get_world_size()
     global_rank = helpers.get_rank()
+
+
+    ###### QUICK FIX FOR CASHEW PLANTATION DATASET ######
+    if args.data_set == "m-cashew-plant":
+        args.data_set = "m-cashew-plantation"
+    #####################################################
 
     if global_rank == 0 and args.log_dir is not None:
         os.makedirs(args.log_dir, exist_ok=True)

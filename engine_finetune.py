@@ -56,6 +56,13 @@ def train_one_epoch(
                 optimizer, data_iter_step / len(data_loader) + epoch, args
             )
 
+        if args.use_imnet_weights:
+            # since we are making use of the weights trained on imagenet, we need to ensure the geobench is rgb. Hence if it is bgr, we reaarange the channels
+            if args.geobench_bands_type == "bgr":
+                print("Rearranging the channels from bgr to rgb")
+                samples = samples[:, [2, 1, 0], :, :]
+            else:
+                print("Geobench bands type is rgb")
         samples = samples.to(device, non_blocking=True)
         targets = targets.to(device, non_blocking=True)
 
@@ -74,14 +81,15 @@ def train_one_epoch(
                 output = output.permute(0, 2, 3, 1)
                 # assuming for segmentation we have the cross entropy loss, we need to convert the output to something of shape N, C
                 output_tmp = output.contiguous().view(-1, output.size(3))
-                target_tmp = targets.unsqueeze(3)
+                target_tmp = targets.permute(0, 2, 3, 1)
                 target_tmp = target_tmp.contiguous().view(-1, target_tmp.size(3))
-                target_tmp = target_tmp.squeeze(1)
+                target_tmp = target_tmp.squeeze(1) # cross entropy loss expects a 1D tensor
                 target_tmp = target_tmp.long()
 
             else:
                 target_tmp = targets
                 output_tmp = output
+
             loss = criterion(output_tmp, target_tmp)
 
         loss_value = loss.item()
@@ -132,12 +140,13 @@ def train_one_epoch(
             or args.data_set == "m-SA-crop-type"
         ):
             # for segmentation we calculate the mean intersection over union, hence the jaccard index
-            output = output.permute(0, 3, 1, 2)
+            output = output.permute(0, 3, 1, 2) # N, C, H, W
             out_p = torch.nn.functional.softmax(output, dim=1)
-            out_p = torch.argmax(out_p, dim=1)
-            # exit()
+            # out_p = torch.argmax(out_p, dim=1)
             num_classes = 7 if args.data_set == "m-cashew-plantation" else 10
             # tmp = targets.unsqueeze(1)
+            targets = targets.squeeze(1)
+
             meanIoU = JaccardIndex(
                 task="multiclass", num_classes=num_classes, average="macro"
             ).to(device)(out_p, targets)
@@ -207,7 +216,6 @@ def evaluate(data_loader, model, device, use_amp=False, args=None):
         data_set == "m-cashew-plantation"
         or data_set == "m-SA-crop-type"
     ):
-        # criterion = DiceLoss(num_classes=args.nb_classes)
         criterion = torch.nn.CrossEntropyLoss()
     else:
         criterion = LabelSmoothingCrossEntropy(smoothing=0)
@@ -271,7 +279,9 @@ def evaluate(data_loader, model, device, use_amp=False, args=None):
             # for segmentation we calculate the mean intersection over union, hence the jaccard index
             output = output.permute(0, 3, 1, 2)
             out_p = torch.nn.functional.softmax(output, dim=1)
+            out_p = torch.argmax(out_p, dim=1)
             num_classes = 7 if data_set == "m-cashew-plantation" else 10
+            target = target.squeeze(1)
             meanIoU = JaccardIndex(
                 task="multiclass", num_classes=num_classes, average="macro"
             ).to(device)(out_p, target)
