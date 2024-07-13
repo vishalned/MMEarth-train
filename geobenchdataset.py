@@ -28,10 +28,17 @@ GEOBENCH_TASK = {
 }
 
 
-def get_band_names(version="0.9.1"):
+def get_band_names(version="0.9.1", geobench_bands_type="full"):
     if version == "1.0":
-        with open("BAND_NAMES_v1.json", "r") as f:
-            return json.load(f)
+        if geobench_bands_type == "full":
+            with open("BAND_NAMES_v1_full.json", "r") as f:
+                return json.load(f)
+        elif geobench_bands_type == "rgb":
+            with open("BAND_NAMES_v1_rgb.json", "r") as f:
+                return json.load(f)
+        elif geobench_bands_type == "bgr":    
+            with open("BAND_NAMES_v1_bgr.json", "r") as f:
+                return json.load(f)
     elif version == "0.9.1":
         with open("BAND_NAMES.json", "r") as f:
             return json.load(f)
@@ -47,6 +54,7 @@ class GeobenchDataset(Dataset):
         transform=None,
         partition: str = "default",
         version: str = "0.9.1",
+        geobench_bands_type: str = "full",
     ):
         if split == "val":
             split = "valid"
@@ -58,7 +66,7 @@ class GeobenchDataset(Dataset):
         self.dataset_name = dataset_name
         self.dataset = task.get_dataset(
             split=split,
-            band_names=get_band_names(version)[dataset_name],
+            band_names=get_band_names(version, geobench_bands_type)[dataset_name],
             partition_name=partition,
         )
         self.label_map = task.get_label_map()
@@ -83,7 +91,7 @@ class GeobenchDataset(Dataset):
         # get the tmp bands in the same order as the ones present in the BAND_NAMES.json file
         self.tmp_band_indices = [
             self.tmp_band_names.index(band_name)
-            for band_name in get_band_names(version)[dataset_name]
+            for band_name in get_band_names(version, geobench_bands_type)[dataset_name]
         ]
         self.patch_size = task.patch_size
         self.label_type = task.label_type
@@ -230,6 +238,8 @@ def get_geobench_dataloaders(
     processed_dir.mkdir(exist_ok=True)
 
     dataloaders = []
+    if dataset_name == 'm-cashew-plantation' and version == '1.0':
+        dataset_name = 'm-cashew-plant'
     task, _ = GeobenchDataset.get_task(dataset_name, version)
     for i, split in enumerate(splits):
         is_train = split == "train"
@@ -238,9 +248,9 @@ def get_geobench_dataloaders(
         bands_type = "" if geobench_bands_type == "full" else f"_{geobench_bands_type}"
         # we check to make sure the number of bands is correct
         if geobench_bands_type == "rgb" or geobench_bands_type == "bgr":
-            assert len(get_band_names(version)[dataset_name]) == 3
+            assert len(get_band_names(version, geobench_bands_type)[dataset_name]) == 3
         elif geobench_bands_type == "full":
-            assert len(get_band_names(version)[dataset_name]) == 12
+            assert len(get_band_names(version, geobench_bands_type)[dataset_name]) == 12
 
         beton_file = processed_dir / f"{split}_{dataset_name}_{partition}{subset}{bands_type}.beton"
 
@@ -255,6 +265,7 @@ def get_geobench_dataloaders(
                 transform=transform,
                 partition=partition,
                 version=version,
+                geobench_bands_type=geobench_bands_type,
             )
 
             if len(dataset) == 0:

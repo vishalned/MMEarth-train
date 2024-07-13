@@ -13,7 +13,7 @@
 ############################################################################################################
 
 
-pretraining=1M-64
+pretraining=1M-64-full-u
 datasets=("m-so2sat" "m-bigearthnet")
 linear_probe=True
 output_dir_base="/projects/dereeco/data/global-lr/ConvNeXt-V2/results_v001"
@@ -39,6 +39,7 @@ echo "dataset: $dataset"
 echo "task_type: $task_type"
 echo "output_dir: $output_dir"
 echo "log_dir: $log_dir"
+echo "pretraining: $pretraining"
 
 
 # Run python script for linear probe or fine-tuning
@@ -57,7 +58,7 @@ python -m main_finetune \
     --mixup 0. \
     --cutmix 0. \
     --smoothing 0.2 \
-    --finetune /projects/dereeco/data/mmearth_checkpoints_v001/results_1M_64_rgb/checkpoint-199.pth \
+    --finetune /projects/dereeco/data/mmearth_checkpoints_v001/results_1M_64_u/checkpoint-199.pth \
     --output_dir "$output_dir" \
     --data_set "$dataset" \
     --linear_probe "$linear_probe" \
@@ -71,7 +72,7 @@ python -m main_finetune \
     --run_on_test True \
     --save_ckpt True \
     --test_scores_dir /home/qbk152/vishal/MMEarth-train/test_scores/ \
-    --geobench_bands_type "bgr" \
+    --geobench_bands_type "full" \
     --version 1.0 \
     --num_workers 2 \
 

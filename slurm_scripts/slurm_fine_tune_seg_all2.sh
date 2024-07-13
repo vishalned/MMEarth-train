@@ -20,7 +20,7 @@
 
 
 datasets=("m-cashew-plant" "m-SA-crop-type")
-pretraining="1M-64"
+pretraining="1M-64-img"
 
 
 task_type="unet-lp&ft"
@@ -36,7 +36,12 @@ output_dir="${output_dir_base}/${task_type}-${datasets[$dataset_idx]}-${pretrain
 log_dir="${log_dir_base}/${task_type}-${datasets[$dataset_idx]}-${pretraining}"
 dataset="${datasets[$dataset_idx]}"
 
-
+echo "SLURM_JOB_NODELIST: $SLURM_JOB_NODELIST"
+echo "dataset: $dataset"
+echo "task_type: $task_type"
+echo "output_dir: $output_dir"
+echo "log_dir: $log_dir"
+echo "pretraining: $pretraining"
 
 
 python -m main_finetune \
@@ -54,7 +59,7 @@ python -m main_finetune \
     --mixup 0. \
     --cutmix 0. \
     --smoothing 0 \
-    --finetune /projects/dereeco/data/mmearth_checkpoints_v001/results_1M_64_rgb/checkpoint-199.pth \
+    --finetune /projects/dereeco/data/mmearth_checkpoints_v001/results_1M_64_img/checkpoint-199.pth \
     --output_dir "$output_dir" \
     --data_set "$dataset" \
     --linear_probe "$linear_probe" \
@@ -68,7 +73,7 @@ python -m main_finetune \
     --run_on_test True \
     --save_ckpt True \
     --test_scores_dir /home/qbk152/vishal/MMEarth-train/test_scores/ \
-    --geobench_bands_type "bgr" \
+    --geobench_bands_type "full" \
     --version 1.0 \
     --num_workers 2 \
 

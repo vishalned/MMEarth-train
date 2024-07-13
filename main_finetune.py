@@ -363,7 +363,7 @@ def get_args_parser():
     )
 
     parser.add_argument("--wandb", type=str2bool, default=False)
-    parser.add_argument("--wandb_project", type=str, default="global-lr-ft")
+    parser.add_argument("--wandb_project", type=str, default="mmearth-v001-ft")
     parser.add_argument("--wandb_run_name", type=str, default="")
 
     parser.add_argument("--pretraining", type=str, default="")
@@ -969,7 +969,11 @@ def main(args: argparse.Namespace):
             args.partition,
             indices=[list(range(10))] if args.debug else None,
             version=args.version,
+            geobench_bands_type=args.geobench_bands_type,
+            
         )
+
+        print('test_loader data shape:', next(iter(test_loader))[0].shape)
 
         test_stats = evaluate(
             test_loader, model, device, use_amp=args.use_amp, args=args
