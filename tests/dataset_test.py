@@ -116,11 +116,11 @@ def test_geobench_dataset(split, dataset_name):
         "m-SA-crop-type",
     ],
 )
-def test_geobench_dataloader(dataset_name):
+@pytest.mark.parametrize("partition", ["0.05x_train", "default"])
+def test_geobench_dataloader(dataset_name, partition):
     test_out = Path("test_out")
     test_out.mkdir(exist_ok=True)
     splits = ["train", "val", "test"]
-    partition = "default"
 
     try:
         loaders, task = get_geobench_dataloaders(
