@@ -439,4 +439,4 @@ def convert_geobench_to_beton(
     writer = DatasetWriter(write_path, fields, num_workers=num_workers)
 
     # Write dataset
-    writer.from_indexed_dataset(dataset, indices=indices)
+    writer.from_indexed_dataset(dataset, indices=indices, shuffle_indices=True)
