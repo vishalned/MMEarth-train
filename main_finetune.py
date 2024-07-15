@@ -679,10 +679,11 @@ def main(args: argparse.Namespace):
             )
             test_score = test_stats["meanAP"]
 
-        elif (
-            args.data_set == "m-SA-crop-type"
-            or args.data_set == "m-cashew-plantation"
-        ):
+        elif args.data_set in [
+                "m-SA-crop-type",
+                "m-cashew-plantation",
+                "m-cashew-plant",
+            ]:
             print(
                 f"mIoU of the model on the {len(dataset_test)} test images: {test_stats['meanIoU']:.5f}"
             )
@@ -694,10 +695,11 @@ def main(args: argparse.Namespace):
             test_score = test_stats["acc1"]
 
         if helpers.is_main_process():
-            if (
-                args.data_set == "m-cashew-plantation"
-                or args.data_set == "m-SA-crop-type"
-            ):
+            if args.data_set in [
+                "m-SA-crop-type",
+                "m-cashew-plantation",
+                "m-cashew-plant",
+            ]:
                 file_str = f"unet--{args.data_set}--{args.pretraining}.txt"
             else:
                 if args.percent is None and args.num_samples is None:
@@ -973,10 +975,11 @@ def main(args: argparse.Namespace):
         print(f"Final test set, score: {test_score}")
 
         if helpers.is_main_process():
-            if (
-                args.data_set == "m-cashew-plantation"
-                or args.data_set == "m-SA-crop-type"
-            ):
+            if args.data_set in [
+                "m-SA-crop-type",
+                "m-cashew-plantation",
+                "m-cashew-plant",
+            ]:
                 file_str = f"unet_lp&ft--{args.data_set}--{args.pretraining}.txt"
             else:
                 if args.partition in ["default", "1.00x_train"]:

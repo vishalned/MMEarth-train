@@ -22,18 +22,18 @@ from helpers import adjust_learning_rate
 
 
 def train_one_epoch(
-    model: torch.nn.Module,
-    criterion: torch.nn.Module,
-    data_loader: ffcv.Loader,
-    optimizer: torch.optim.Optimizer,
-    device: torch.device,
-    epoch: int,
-    loss_scaler,
-    max_norm: float = 0,
-    model_ema: Optional[ModelEma] = None,
-    mixup_fn: Optional[Mixup] = None,
-    log_writer=None,
-    args=None,
+        model: torch.nn.Module,
+        criterion: torch.nn.Module,
+        data_loader: ffcv.Loader,
+        optimizer: torch.optim.Optimizer,
+        device: torch.device,
+        epoch: int,
+        loss_scaler,
+        max_norm: float = 0,
+        model_ema: Optional[ModelEma] = None,
+        mixup_fn: Optional[Mixup] = None,
+        log_writer=None,
+        args=None,
 ):
     model.train()
     metric_logger = helpers.MetricLogger(delimiter="  ")
@@ -48,7 +48,7 @@ def train_one_epoch(
     optimizer.zero_grad()
 
     for data_iter_step, (samples, targets, _, _) in enumerate(
-        metric_logger.log_every(data_loader, print_freq, header)
+            metric_logger.log_every(data_loader, print_freq, header)
     ):
         # we use a per iteration (instead of per epoch) lr scheduler
         if data_iter_step % update_freq == 0:
@@ -63,13 +63,14 @@ def train_one_epoch(
             samples, targets = mixup_fn(samples, targets)
 
         with torch.autocast(
-            device_type=device.type, dtype=torch.bfloat16, enabled=use_amp
+                device_type=device.type, dtype=torch.bfloat16, enabled=use_amp
         ):
             output = model(samples)
-            if (
-                args.data_set == "m-cashew-plantation"
-                or args.data_set == "m-SA-crop-type"
-            ):
+            if args.data_set in [
+                "m-SA-crop-type",
+                "m-cashew-plantation",
+                "m-cashew-plant",
+            ]:
                 # make output class the last dimension
                 output = output.permute(0, 2, 3, 1)
                 # assuming for segmentation we have the cross entropy loss, we need to convert the output to something of shape N, C
@@ -93,7 +94,7 @@ def train_one_epoch(
         if use_amp:
             # this attribute is added by timm on one optimizer (adahessian)
             is_second_order = (
-                hasattr(optimizer, "is_second_order") and optimizer.is_second_order
+                    hasattr(optimizer, "is_second_order") and optimizer.is_second_order
             )
             loss /= update_freq
             grad_norm = loss_scaler(
@@ -127,10 +128,11 @@ def train_one_epoch(
             out_p = torch.sigmoid(output)
             metric = MultilabelAveragePrecision(num_labels=43, average="macro")
             meanAP = metric(out_p, targets)
-        elif (
-            args.data_set == "m-cashew-plantation"
-            or args.data_set == "m-SA-crop-type"
-        ):
+        elif args.data_set in [
+            "m-SA-crop-type",
+            "m-cashew-plantation",
+            "m-cashew-plant",
+        ]:
             # for segmentation we calculate the mean intersection over union, hence the jaccard index
             output = output.permute(0, 3, 1, 2)
             out_p = torch.nn.functional.softmax(output, dim=1)
@@ -151,10 +153,11 @@ def train_one_epoch(
         metric_logger.update(loss=loss_value)
         if args.data_set == "m-bigearthnet":
             metric_logger.update(meanAP=meanAP)
-        elif (
-            args.data_set == "m-cashew-plantation"
-            or args.data_set == "m-SA-crop-type"
-        ):
+        elif args.data_set in [
+            "m-SA-crop-type",
+            "m-cashew-plantation",
+            "m-cashew-plant",
+        ]:
             metric_logger.update(meanIoU=meanIoU)
         else:
             metric_logger.update(class_acc=class_acc)
@@ -177,10 +180,11 @@ def train_one_epoch(
             log_writer.update(loss=loss_value, head="loss")
             if args.data_set == "m-bigearthnet":
                 log_writer.update(meanAP=meanAP, head="loss")
-            elif (
-                args.data_set == "m-cashew-plantation"
-                or args.data_set == "m-SA-crop-type"
-            ):
+            elif args.data_set in [
+                "m-SA-crop-type",
+                "m-cashew-plantation",
+                "m-cashew-plant",
+            ]:
                 log_writer.update(meanIoU=meanIoU, head="loss")
             else:
                 log_writer.update(class_acc=class_acc, head="loss")
@@ -203,10 +207,11 @@ def evaluate(data_loader, model, device, use_amp=False, args=None):
     # for bigearthnet, we use BCE loss
     if data_set == "m-bigearthnet":
         criterion = torch.nn.BCEWithLogitsLoss()
-    elif (
-        data_set == "m-cashew-plantation"
-        or data_set == "m-SA-crop-type"
-    ):
+    elif args.data_set in [
+        "m-SA-crop-type",
+        "m-cashew-plantation",
+        "m-cashew-plant",
+    ]:
         # criterion = DiceLoss(num_classes=args.nb_classes)
         criterion = torch.nn.CrossEntropyLoss()
     else:
@@ -228,16 +233,17 @@ def evaluate(data_loader, model, device, use_amp=False, args=None):
 
         # compute output
         with torch.autocast(
-            device_type=device.__str__(), dtype=torch.bfloat16, enabled=use_amp
+                device_type=device.__str__(), dtype=torch.bfloat16, enabled=use_amp
         ):
             output = model(images)
             if isinstance(output, dict):
                 output = output["logits"]
 
-            if (
-                data_set == "m-cashew-plantation"
-                or data_set == "m-SA-crop-type"
-            ):
+            if args.data_set in [
+                "m-SA-crop-type",
+                "m-cashew-plantation",
+                "m-cashew-plant",
+            ]:
                 output = output.permute(0, 2, 3, 1)
 
                 output_tmp = output.contiguous().view(-1, output.size(3))
@@ -264,10 +270,11 @@ def evaluate(data_loader, model, device, use_amp=False, args=None):
             out_p = torch.sigmoid(output)
             metric = MultilabelAveragePrecision(num_labels=43, average="macro")
             meanAP = metric(out_p, target)
-        elif (
-            data_set == "m-cashew-plantation"
-            or data_set == "m-SA-crop-type"
-        ):
+        elif args.data_set in [
+            "m-SA-crop-type",
+            "m-cashew-plantation",
+            "m-cashew-plant",
+        ]:
             # for segmentation we calculate the mean intersection over union, hence the jaccard index
             output = output.permute(0, 3, 1, 2)
             out_p = torch.nn.functional.softmax(output, dim=1)
@@ -304,10 +311,11 @@ def evaluate(data_loader, model, device, use_amp=False, args=None):
             batch_size = images.shape[0]
             metric_logger.update(loss=loss.item())
             metric_logger.meters["meanAP"].update(meanAP.item(), n=batch_size)
-        elif (
-            data_set == "m-cashew-plantation"
-            or data_set == "m-SA-crop-type"
-        ):
+        elif args.data_set in [
+            "m-SA-crop-type",
+            "m-cashew-plantation",
+            "m-cashew-plant",
+        ]:
             batch_size = images.shape[0]
             metric_logger.update(loss=loss.item())
             metric_logger.meters["meanIoU"].update(meanIoU.item(), n=batch_size)
@@ -327,10 +335,11 @@ def evaluate(data_loader, model, device, use_amp=False, args=None):
         )
 
         return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
-    elif (
-        data_set == "m-cashew-plantation"
-        or data_set == "m-SA-crop-type"
-    ):
+    elif args.data_set in [
+        "m-SA-crop-type",
+        "m-cashew-plantation",
+        "m-cashew-plant",
+    ]:
         metric_logger.synchronize_between_processes()
         print(
             "* Mean IoU {meanIoU.global_avg:.3f} loss {losses.global_avg:.3f}".format(
