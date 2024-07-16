@@ -332,7 +332,9 @@ def get_geobench_dataloaders(
         # Replaces PyTorch data loader (`torch.utils.data.Dataloader`)
         sampler = (
             OrderOption.RANDOM if distributed else OrderOption.QUASI_RANDOM
+            # OrderOption.RANDOM
         )  # quasi random not working distributed
+        print('Sampler: ',sampler)
         dataloader = ffcv.Loader(
             beton_file,
             batch_size=batch_size_per_device,
@@ -459,4 +461,4 @@ def convert_geobench_to_beton(
     writer = DatasetWriter(write_path, fields, num_workers=num_workers)
 
     # Write dataset
-    writer.from_indexed_dataset(dataset, indices=indices)
+    writer.from_indexed_dataset(dataset, indices=indices) # add shuffle indices here if needed

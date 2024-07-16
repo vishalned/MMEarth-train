@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=dist-shift-seg
 
-#SBATCH --gres=gpu:titanrtx:1
+#SBATCH --gres=gpu:a40:1
 #SBATCH --tasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --time=1-00:00:00
@@ -20,7 +20,7 @@
 
 
 datasets=("m-cashew-plant" "m-SA-crop-type")
-pretraining="1M-64-img"
+pretraining="1M-128-rgb-32"
 
 
 task_type="unet-lp&ft"
@@ -59,7 +59,7 @@ python -m main_finetune \
     --mixup 0. \
     --cutmix 0. \
     --smoothing 0 \
-    --finetune /projects/dereeco/data/mmearth_checkpoints_v001/results_1M_64_img/checkpoint-199.pth \
+    --finetune /projects/dereeco/data/mmearth_checkpoints_v001/results_1M_rgb_128-32/checkpoint-199.pth \
     --output_dir "$output_dir" \
     --data_set "$dataset" \
     --linear_probe "$linear_probe" \
@@ -67,13 +67,13 @@ python -m main_finetune \
     --wandb True \
     --wandb_run_name "$task_type--$dataset--$pretraining" \
     --auto_resume False \
-    --patch_size 8 \
-    --input_size 56 \
+    --patch_size 32 \
+    --input_size 128 \
     --use_orig_stem False \
     --run_on_test True \
     --save_ckpt True \
     --test_scores_dir /home/qbk152/vishal/MMEarth-train/test_scores/ \
-    --geobench_bands_type "full" \
+    --geobench_bands_type "bgr" \
     --version 1.0 \
     --num_workers 2 \
 

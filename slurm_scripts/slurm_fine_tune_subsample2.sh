@@ -10,7 +10,7 @@
 # TOTAL MEMORY PER NODE
 #SBATCH --mem=64G 
 # NUMBER OF JOBS TO RUN
-#SBATCH --array=1-9
+#SBATCH --array=1
 
 
 #############################################################################################################
@@ -20,33 +20,28 @@
 
 
 
-datasets=("m-bigearthnet" "m-so2sat" "m-eurosat")
+datasets=("m-eurosat")
 linear_probe=True
 task_type=lp # lp for linear probe, ft for fine-tuning
 pretraining=1M-64-full
 
 
 
-partitions=("0.01x_train" "0.05x_train" "0.50x_train") # for bigearthnet this corresponds to (200, 1000, 10000) samples
-dataset_idx=$(( (SLURM_ARRAY_TASK_ID - 1) / 3))
-idx=$(( (SLURM_ARRAY_TASK_ID - 1) % 3 ))
+# partitions=("0.01x_train") # for bigearthnet this corresponds to (200, 1000, 10000) samples
+# choose the first dataset
+dataset_idx=0
+idx=0
 dataset=${datasets[$dataset_idx]}
 partition=${partitions[$idx]}
 blr=2e-4
 
 output_dir="/projects/dereeco/data/global-lr/ConvNeXt-V2/results_v001/${task_type}-${dataset}_${pretraining}_${partition}"
 
-# if dataset is eurosat set the batch size to 8
-if [ $dataset == "m-eurosat" ]; then
-    batch_size=8
-else
-    batch_size=32
-fi
 
 
 python -m  main_finetune \
             --model convnextv2_atto \
-            --batch_size $batch_size \
+            --batch_size 8 \
             --update_freq 1 \
             --blr $blr \
             --epochs 100 \
@@ -72,11 +67,11 @@ python -m  main_finetune \
             --use_orig_stem False \
             --run_on_test True \
             --save_ckpt True \
-            --partition $partition \
             --version 1.0 \
             --num_workers 2 \
             --test_scores_dir /home/qbk152/vishal/MMEarth-train/test_scores/ \
             --geobench_bands_type "full" \
+            # --partition $partition
             # --percent $percent
 
 

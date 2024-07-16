@@ -11,3 +11,12 @@ wandb/
 masking_visualizations/
 __pycache__/
 models/__pycache__/
+test_scores/
+test_scores_bench/
+testing_models/
+new_test_scores/
+file_names.txt
+run_group_eval.py
+test_scores.zip
+latex_tables.py
+.pytest_cache/

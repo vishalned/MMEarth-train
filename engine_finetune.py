@@ -7,18 +7,45 @@
 
 
 import math
-from typing import Optional
 
 import ffcv
 import torch
 from timm.data import Mixup
 from timm.loss import LabelSmoothingCrossEntropy
 from timm.utils import accuracy, ModelEma
-from torchmetrics import JaccardIndex
-from torchmetrics.classification import MultilabelAveragePrecision
+import torchmetrics
+from geobench.dataset import SegmentationClasses
+from geobench.label import Classification, MultiLabelClassification
+from geobench.task import TaskSpecifications
+from typing import Callable, Dict, List, Optional, Union
 
 import helpers
 from helpers import adjust_learning_rate
+
+def eval_metrics_generator(task_specs: TaskSpecifications) -> List[torchmetrics.MetricCollection]:
+    """Return the appropriate eval function depending on the task_specs.
+
+    Args:
+        task_specs: a GeoBench object describing the task to be performed
+
+    Returns:
+        metric collection used during evaluation
+    """
+    metrics: List[torchmetrics.MetricCollection] = {  
+        Classification: torchmetrics.MetricCollection(
+            {"Accuracy": torchmetrics.Accuracy(task="multiclass", num_classes=task_specs.label_type.n_classes, average="micro")}
+        ),
+        SegmentationClasses: torchmetrics.MetricCollection(
+            {
+                "Jaccard": torchmetrics.JaccardIndex(task="multiclass", num_classes=task_specs.label_type.n_classes, average="macro"),
+            }
+        ),
+        MultiLabelClassification: torchmetrics.MetricCollection(
+            {"F1Score": torchmetrics.F1Score(task="multilabel", num_labels=task_specs.label_type.n_classes, average="micro")}
+        ),
+    }[task_specs.label_type.__class__]
+
+    return metrics
 
 
 def train_one_epoch(
@@ -34,6 +61,7 @@ def train_one_epoch(
     mixup_fn: Optional[Mixup] = None,
     log_writer=None,
     args=None,
+    task=None
 ):
     model.train()
     metric_logger = helpers.MetricLogger(delimiter="  ")
@@ -42,7 +70,7 @@ def train_one_epoch(
     )
     header = "Epoch: [{}]".format(epoch)
     print_freq = 20
-
+    metric = eval_metrics_generator(task)
     update_freq = args.update_freq
     use_amp = args.use_amp
     optimizer.zero_grad()
@@ -59,10 +87,8 @@ def train_one_epoch(
         if args.use_imnet_weights:
             # since we are making use of the weights trained on imagenet, we need to ensure the geobench is rgb. Hence if it is bgr, we reaarange the channels
             if args.geobench_bands_type == "bgr":
-                print("Rearranging the channels from bgr to rgb")
                 samples = samples[:, [2, 1, 0], :, :]
-            else:
-                print("Geobench bands type is rgb")
+
         samples = samples.to(device, non_blocking=True)
         targets = targets.to(device, non_blocking=True)
 
@@ -133,8 +159,6 @@ def train_one_epoch(
             # for bigearthnet we calculate the mean average precision since that is used a lot for multi-label classification
             # we use the sigmoid function to get the probabilities
             out_p = torch.sigmoid(output)
-            metric = MultilabelAveragePrecision(num_labels=43, average="macro")
-            meanAP = metric(out_p, targets)
         elif (
             args.data_set == "m-cashew-plantation"
             or args.data_set == "m-SA-crop-type"
@@ -142,31 +166,18 @@ def train_one_epoch(
             # for segmentation we calculate the mean intersection over union, hence the jaccard index
             output = output.permute(0, 3, 1, 2) # N, C, H, W
             out_p = torch.nn.functional.softmax(output, dim=1)
-            # out_p = torch.argmax(out_p, dim=1)
             num_classes = 7 if args.data_set == "m-cashew-plantation" else 10
-            # tmp = targets.unsqueeze(1)
             targets = targets.squeeze(1)
 
-            meanIoU = JaccardIndex(
-                task="multiclass", num_classes=num_classes, average="macro"
-            ).to(device)(out_p, targets)
 
-        else:
-            if mixup_fn is None:
-                class_acc = (output.max(-1)[-1] == targets).float().mean()
-            else:
-                class_acc = None
+        score = metric(output, targets)
 
         metric_logger.update(loss=loss_value)
-        if args.data_set == "m-bigearthnet":
-            metric_logger.update(meanAP=meanAP)
-        elif (
-            args.data_set == "m-cashew-plantation"
-            or args.data_set == "m-SA-crop-type"
-        ):
-            metric_logger.update(meanIoU=meanIoU)
-        else:
-            metric_logger.update(class_acc=class_acc)
+        # metric_logger.update(score=score)
+        for key in score.keys():
+            metric_logger.meters[key].update(score[key].item())
+
+
         min_lr = 10.0
         max_lr = 0.0
         for group in optimizer.param_groups:
@@ -182,32 +193,23 @@ def train_one_epoch(
         metric_logger.update(weight_decay=weight_decay_value)
         if use_amp:
             metric_logger.update(grad_norm=grad_norm)
-        if log_writer is not None:
-            log_writer.update(loss=loss_value, head="loss")
-            if args.data_set == "m-bigearthnet":
-                log_writer.update(meanAP=meanAP, head="loss")
-            elif (
-                args.data_set == "m-cashew-plantation"
-                or args.data_set == "m-SA-crop-type"
-            ):
-                log_writer.update(meanIoU=meanIoU, head="loss")
-            else:
-                log_writer.update(class_acc=class_acc, head="loss")
-            log_writer.update(lr=max_lr, head="opt")
-            log_writer.update(min_lr=min_lr, head="opt")
-            log_writer.update(weight_decay=weight_decay_value, head="opt")
-            if use_amp:
-                log_writer.update(grad_norm=grad_norm, head="opt")
-            log_writer.set_step()
+
 
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
-    print("Averaged stats:", metric_logger)
-    return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
+    # print("Averaged stats:", metric_logger)
+
+    # we create a dict, with the metrics overwritten with metric.copute() values, and the rest as the global average
+    metric_values = metric.compute()
+    return_dict = {k: meter.global_avg for k, meter in metric_logger.meters.items()} 
+    for key in metric_values.keys(): # overwrite with computed values
+        return_dict[key] = metric_values[key].item()
+
+    return return_dict
 
 
 @torch.no_grad()
-def evaluate(data_loader, model, device, use_amp=False, args=None):
+def evaluate(data_loader, model, device, use_amp=False, args=None, task=None):
     data_set = args.data_set
     # for bigearthnet, we use BCE loss
     if data_set == "m-bigearthnet":
@@ -219,7 +221,6 @@ def evaluate(data_loader, model, device, use_amp=False, args=None):
         criterion = torch.nn.CrossEntropyLoss()
     else:
         criterion = LabelSmoothingCrossEntropy(smoothing=0)
-        # criterion = torch.nn.CrossEntropyLoss()
 
     metric_logger = helpers.MetricLogger(delimiter="  ")
     header = "Test:"
@@ -227,12 +228,20 @@ def evaluate(data_loader, model, device, use_amp=False, args=None):
     # switch to evaluation mode
     model.eval()
 
+    metric = eval_metrics_generator(task).to(device) # obtain the eval metric
+
     for batch in metric_logger.log_every(data_loader, 10, header):
         images = batch[0]
         target = batch[1]
 
         images = images.to(device, non_blocking=True)
         target = target.to(device, non_blocking=True)
+
+        if args.use_imnet_weights:
+            # since we are making use of the weights trained on imagenet, we need to ensure the geobench is rgb. Hence if the data is bgr, we reaarange the channels
+            if args.geobench_bands_type == "bgr":
+                images = images[:, [2, 1, 0], :, :]
+
 
         # compute output
         with torch.cuda.amp.autocast(
@@ -266,106 +275,41 @@ def evaluate(data_loader, model, device, use_amp=False, args=None):
         if device.__str__ == "cuda":
             torch.cuda.synchronize()
 
-        # for bigearthnet we compute the mean average precision
-        # we use the sigmoid function to get the probabilities
         if data_set == "m-bigearthnet":
             out_p = torch.sigmoid(output)
-            metric = MultilabelAveragePrecision(num_labels=43, average="macro")
-            meanAP = metric(out_p, target)
         elif (
             data_set == "m-cashew-plantation"
             or data_set == "m-SA-crop-type"
         ):
-            # for segmentation we calculate the mean intersection over union, hence the jaccard index
             output = output.permute(0, 3, 1, 2)
             out_p = torch.nn.functional.softmax(output, dim=1)
             out_p = torch.argmax(out_p, dim=1)
-            num_classes = 7 if data_set == "m-cashew-plantation" else 10
             target = target.squeeze(1)
-            meanIoU = JaccardIndex(
-                task="multiclass", num_classes=num_classes, average="macro"
-            ).to(device)(out_p, target)
-        else:
-            # we use top 5 only if we have more than 5 classes
-            if args.nb_classes > 5:
-                acc = accuracy(output, target, topk=(1, 5))
-            else:
-                acc = accuracy(output, target, topk=(1,))
 
-            if len(acc) == 2:
-                acc1, acc5 = acc
-            else:
-                acc1 = acc[0]
-                acc5 = None
+        score = metric(output, target)
 
-        # # visualize some images and predictions
-        # if args.visualize:
-        #     if data_set == 'geobench.m-cashew-plantation' or data_set == 'geobench.m-SA-crop-type':
-        #         output = output.permute(0, 2, 3, 1)
-        #         out_p = torch.nn.functional.softmax(output, dim=3)
-        #         out_p = torch.argmax(out_p, dim=3)
-        #         visualize_segmentation(images, out_p, target, args, epoch=200)
-        #         exit()
-        #     else:
-        #         raise NotImplementedError()
+        batch_size = images.shape[0] # this can be used on the metric_logger update function if needed.
+        metric_logger.update(loss=loss.item())
+        for key in score.keys():
+            metric_logger.meters[key].update(score[key].item())
 
-        ## for bigearthnet ONLY
-        if data_set == "m-bigearthnet":
-            batch_size = images.shape[0]
-            metric_logger.update(loss=loss.item())
-            metric_logger.meters["meanAP"].update(meanAP.item(), n=batch_size)
-        elif (
-            data_set == "m-cashew-plantation"
-            or data_set == "m-SA-crop-type"
-        ):
-            batch_size = images.shape[0]
-            metric_logger.update(loss=loss.item())
-            metric_logger.meters["meanIoU"].update(meanIoU.item(), n=batch_size)
-        else:
-            batch_size = images.shape[0]
-            metric_logger.update(loss=loss.item())
-            metric_logger.meters["acc1"].update(acc1.item(), n=batch_size)
-            if acc5 is not None:
-                metric_logger.meters["acc5"].update(acc5.item(), n=batch_size)
+    test_metric = metric.compute()
+    logging_text = "**** "
+    for key in test_metric.keys():
+        logging_text += f"{key} {test_metric[key].item():.3f} "
 
-    if data_set == "m-bigearthnet":
-        metric_logger.synchronize_between_processes()
-        print(
-            "* Mean AP {meanAP.global_avg:.3f} loss {losses.global_avg:.3f}".format(
-                meanAP=metric_logger.meanAP, losses=metric_logger.loss
-            )
-        )
+    logging_text += f"loss {metric_logger.loss.global_avg:.3f}"
 
-        return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
-    elif (
-        data_set == "m-cashew-plantation"
-        or data_set == "m-SA-crop-type"
-    ):
-        metric_logger.synchronize_between_processes()
-        print(
-            "* Mean IoU {meanIoU.global_avg:.3f} loss {losses.global_avg:.3f}".format(
-                meanIoU=metric_logger.meanIoU, losses=metric_logger.loss
-            )
-        )
+    print(logging_text)
 
-        return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
+    # we can compute global average on all except the metric values  
+    return_dict = {k: meter.global_avg for k, meter in metric_logger.meters.items()}
+    # we replace the metrics with metric.compute() values
+    for key in test_metric.keys():
+        return_dict[key] = test_metric[key].item()
 
-    else:
-        # gather the stats from all processes
-        metric_logger.synchronize_between_processes()
-        if acc5 is not None:
-            print(
-                "* Acc@1 {top1.global_avg:.3f} Acc@5 {top5.global_avg:.3f} loss {losses.global_avg:.3f}".format(
-                    top1=metric_logger.acc1,
-                    top5=metric_logger.acc5,
-                    losses=metric_logger.loss,
-                )
-            )
-        else:
-            print(
-                "* Acc@1 {top1.global_avg:.3f} loss {losses.global_avg:.3f}".format(
-                    top1=metric_logger.acc1, losses=metric_logger.loss
-                )
-            )
+    return return_dict
 
-        return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
+
+
+    

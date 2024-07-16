@@ -15,6 +15,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+import torchvision
 import torch.backends.cudnn as cudnn
 import wandb
 from geobench import GEO_BENCH_DIR
@@ -466,7 +467,7 @@ def main(args: argparse.Namespace):
             num_classes=num_classes,
         )
 
-    # loading the models
+    ############################## LOADING MODEL AND FREEZING/UNFREEING MODEL #############################
     if "convnextv2_unet" in args.model:
         model = convnextv2_unet.__dict__[args.model](
             num_classes=num_classes,
@@ -478,6 +479,19 @@ def main(args: argparse.Namespace):
             use_orig_stem=args.use_orig_stem,
             in_chans=in_channels,
         )
+    elif 'resnet' in args.model:
+        if 'unet' in args.model:
+            import segmentation_models_pytorch as smp
+            model_name = 'resnet18' if '18' in args.model else 'resnet50'
+            model = smp.Unet(
+                encoder_name=model_name,
+                encoder_weights=None,
+                in_channels=in_channels,
+                classes=args.nb_classes
+            )
+        else:
+        # resnet 18 or 50
+            model = torchvision.models.__dict__[args.model](pretrained=False)
     else:
         model = convnextv2.__dict__[args.model](
             num_classes=num_classes,
@@ -491,12 +505,11 @@ def main(args: argparse.Namespace):
         )
 
     # finetune or linear probing and loading the pre trained models
-    if args.finetune and not args.linear_probe:
+    if not args.linear_probe: # finetuning
         if "unet" in args.model:
             raise ValueError(
                 "All experiments were done with a combination of linear probe and fine-tuning. Please set the --linear_probe to True, to enable linear probe."
             )
-        # finetuning
         checkpoint = torch.load(args.finetune, map_location="cpu")
         print("Load pre-trained checkpoint from: %s" % args.finetune)
         checkpoint_model = checkpoint["model"] if "model" in checkpoint else checkpoint
@@ -516,14 +529,54 @@ def main(args: argparse.Namespace):
                 print(f"Removing key {k} from pretrained checkpoint")
                 del checkpoint_model[k]
 
-        checkpoint_model = remap_checkpoint_keys(checkpoint_model)
-        helpers.load_state_dict(model, checkpoint_model, prefix=args.model_prefix)
-        # manually initialize fc layer
+        if 'seco' in args.finetune:
+            # for the seco model, the pretrained weights has encoder_q and encoder_k, so we need to remove these keys from the pretrained weights
+            # and only choose the encoder_q weights. We then replace the term encoder_q with the corresponding terms in the
+            # resnet model
+            checkpoint_model_keys = list(checkpoint_model.keys())
+            for k in checkpoint_model_keys:
+                if 'encoder_k' in k or 'queue' in k or 'heads' in k:
+                    print(f"Removing key {k} from pretrained checkpoint")
+                    del checkpoint_model[k]
 
-        trunc_normal_(model.head.weight, std=2e-5)
-        torch.nn.init.constant_(model.head.bias, 0.0)
-    elif args.linear_probe:
-        # linear probe
+            for k, v in zip(list(model.state_dict().keys())[:-2], list(checkpoint_model.keys())):
+                new_v = k
+                checkpoint_model[new_v] = checkpoint_model.pop(v)
+
+        elif 'gassl' in args.finetune:
+            checkpoint_model_state_dict = checkpoint_model['state_dict']
+            # first we remove module prefix from the keys
+            checkpoint_model_state_dict = {k.replace('module.', ''): v for k, v in checkpoint_model_state_dict.items()}
+            
+            checkpoint_model = checkpoint_model_state_dict.copy()
+            for k in checkpoint_model_state_dict:
+                if 'encoder_k' in k or 'queue' in k or 'heads' in k:
+                    print(f"Removing key {k} from pretrained checkpoint")
+                    del checkpoint_model[k]
+            for k, v in zip(list(model.state_dict().keys())[:-2], list(checkpoint_model.keys())):
+                new_v = k
+                checkpoint_model[new_v] = checkpoint_model.pop(v)
+        else:
+            checkpoint_model = remap_checkpoint_keys(checkpoint_model)
+
+        # checkpoint_model = remap_checkpoint_keys(checkpoint_model)
+        helpers.load_state_dict(model, checkpoint_model, prefix=args.model_prefix)
+        
+        # manually initialize fc layer
+        if 'resnet' in args.model:
+            in_features = model.fc.in_features
+            model.fc = torch.nn.Linear(in_features, args.nb_classes)
+            model.fc.weight.requires_grad = True
+            model.fc.bias.requires_grad = True
+            # manually initialize the new head like how its done in the fine-tuning part above
+            trunc_normal_(model.fc.weight, std=2e-5)
+            torch.nn.init.constant_(model.fc.bias, 0.)
+        else:
+            trunc_normal_(model.head.weight, std=2e-5)
+            torch.nn.init.constant_(model.head.bias, 0.)
+
+
+    elif args.linear_probe: # linear probe
         # we still start with the same fine-tuning pre-trained model, and then remove the head. we then make the model frozen, and add a new head for linear probe
         checkpoint = torch.load(args.finetune, map_location="cpu")
 
@@ -545,15 +598,61 @@ def main(args: argparse.Namespace):
                 print(f"Removing key {k} from pretrained checkpoint")
                 del checkpoint_model[k]
 
-        checkpoint_model = remap_checkpoint_keys(checkpoint_model)
+        if 'seco' in args.finetune:
+            # for the seco model, the pretrained weights has encoder_q and encoder_k, so we need to remove these keys from the pretrained weights
+            # and only choose the encoder_q weights. We then replace the term encoder_q with the corresponding terms in the
+            # resnet model
+            checkpoint_model_keys = list(checkpoint_model.keys())
+            for k in checkpoint_model_keys:
+                if 'encoder_k' in k or 'queue' in k or 'heads' in k:
+                    print(f"Removing key {k} from pretrained checkpoint")
+                    del checkpoint_model[k]
+            if 'unet' in args.model:
+                # rename encoder_q to encoder
+                encoder_keys = [k for k in model.state_dict().keys() if 'encoder' in k]
+                for k, v in zip(encoder_keys, list(checkpoint_model.keys())):
+                    new_v = k
+                    checkpoint_model[new_v] = checkpoint_model.pop(v)
+            else:
+                for k, v in zip(list(model.state_dict().keys())[:-2], list(checkpoint_model.keys())):
+                    new_v = k
+                    checkpoint_model[new_v] = checkpoint_model.pop(v)
+
+        elif 'gassl' in args.finetune:
+            checkpoint_model_state_dict = checkpoint_model['state_dict']
+            # first we remove module prefix from the keys
+            checkpoint_model_state_dict = {k.replace('module.', ''): v for k, v in checkpoint_model_state_dict.items()}
+            
+            checkpoint_model = checkpoint_model_state_dict.copy()
+            for k in checkpoint_model_state_dict:
+                if 'encoder_k' in k or 'queue' in k or 'heads' in k:
+                    print(f"Removing key {k} from pretrained checkpoint")
+                    del checkpoint_model[k]     
+            if 'unet' in args.model:
+                # rename encoder_q to encoder
+                checkpoint_model = {k.replace('encoder_q', 'encoder'): v for k, v in checkpoint_model.items()}
+            else:
+                for k, v in zip(list(model.state_dict().keys())[:-2], list(checkpoint_model.keys())):
+                    new_v = k
+                    checkpoint_model[new_v] = checkpoint_model.pop(v)
+        elif 'satlas' in args.finetune and 'unet' in args.model:
+            encoder_keys = [k for k in model.state_dict().keys() if 'encoder' in k]
+            for k, v in zip(encoder_keys, list(checkpoint_model.keys())):
+                new_v = k
+                checkpoint_model[new_v] = checkpoint_model.pop(v)
+
+        else:
+            checkpoint_model = remap_checkpoint_keys(checkpoint_model)
         helpers.load_state_dict(model, checkpoint_model, prefix=args.model_prefix)
 
-        if "convnextv2_unet" in args.model:
+
+
+        if 'convnextv2_unet' in args.model:
             print("---unfreezing the decoder part of the model for unet---")
             # we need to freeze the encoder part of the model
             for param in model.parameters():
                 param.requires_grad = False
-
+            
             model.head.weight.requires_grad = True
             model.head.bias.requires_grad = True
 
@@ -561,9 +660,36 @@ def main(args: argparse.Namespace):
             for layer in model.upsample_layers:
                 for param in layer.parameters():
                     param.requires_grad = True
-
+            
             for param in model.initial_conv_upsample.parameters():
                 param.requires_grad = True
+        elif 'resnet' in args.model and 'unet' in args.model:
+
+            print("---unfreezing the decoder part of the model for unet---")
+            # we need to freeze the encoder part of the model
+            for param in model.encoder.parameters():
+                param.requires_grad = False
+
+            model.decoder.requires_grad = True
+            model.segmentation_head.requires_grad = True
+
+
+        elif 'resnet' in args.model:
+            in_features = model.fc.in_features
+            model.fc = torch.nn.Identity()
+
+            # freeze the model
+            for param in model.parameters():
+                param.requires_grad = False
+
+            # add a new head
+            model.fc = torch.nn.Linear(in_features, args.nb_classes)
+            model.fc.weight.requires_grad = True
+            model.fc.bias.requires_grad = True
+
+            # manually initialize the new head like how its done in the fine-tuning part above
+            trunc_normal_(model.fc.weight, std=2e-5)
+            torch.nn.init.constant_(model.fc.bias, 0.)
         else:
             in_features = model.head.in_features
             model.head = torch.nn.Identity()
@@ -573,14 +699,19 @@ def main(args: argparse.Namespace):
                 param.requires_grad = False
 
             # add a new head
-            model.head = torch.nn.Linear(in_features, num_classes)
+            model.head = torch.nn.Linear(in_features, args.nb_classes)
             model.head.weight.requires_grad = True
             model.head.bias.requires_grad = True
+
+
             # manually initialize the new head like how its done in the fine-tuning part above
             trunc_normal_(model.head.weight, std=2e-5)
-            torch.nn.init.constant_(model.head.bias, 0.0)
+            torch.nn.init.constant_(model.head.bias, 0.)
 
     model.to(device)
+    ####################################################################################################
+
+
 
     model_ema = None
     if args.model_ema:
@@ -594,6 +725,10 @@ def main(args: argparse.Namespace):
         print("Using EMA with decay = %.8f" % args.model_ema_decay)
 
     model_without_ddp = model
+    if 'resnet50' in args.model:
+        model_without_ddp.depths = [3, 4, 6, 3]
+    elif 'resnet18' in args.model:
+        model_without_ddp.depths = [2, 2, 2, 2]
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
 
     print("Model = %s" % str(model_without_ddp))
@@ -645,6 +780,11 @@ def main(args: argparse.Namespace):
     )
     loss_scaler = NativeScaler(args.device)
 
+
+
+
+
+    ############################## LOSS FUNCTION #############################
     if mixup_fn is not None:
         # smoothing is handled with mixup label transform
         criterion = SoftTargetCrossEntropy()
@@ -656,8 +796,40 @@ def main(args: argparse.Namespace):
 
     if args.data_set == "m-bigearthnet":
         criterion = LabelSmoothingBinaryCrossEntropy(smoothing=args.smoothing)
-
     print("criterion = %s" % str(criterion))
+    ##########################################################################
+
+
+
+
+
+    ###### TMP FIX FOR SEGMENTATION DATASET WHEN ONLY RUNNING ON TEST ######
+    if args.data_set in ["m-cashew-plantation", "m-SA-crop-type", "m-cahew-plant"]:
+        if "resnet" in args.model:
+            print("resnet: unfreezing the encoder part of the model")
+            for param in model.encoder.parameters():
+                param.requires_grad = True
+            optimizer.add_param_group({"params": model.encoder.parameters()})
+        else:
+            print("Unfreezing the encoder part of the model")
+            for param in model.parameters():
+                param.requires_grad = True
+
+            optimizer.add_param_group(
+                {"params": model.downsample_layers.parameters()}
+            )
+            optimizer.add_param_group({"params": model.stages.parameters()})
+            if args.use_orig_stem:
+                optimizer.add_param_group(
+                    {"params": model.stem_orig.parameters()}
+                )
+            else:
+                optimizer.add_param_group(
+                    {"params": model.initial_conv.parameters()}
+                )
+                optimizer.add_param_group({"params": model.stem.parameters()})
+    ##############################################################################
+    
 
     helpers.auto_load_model(
         args=args,
@@ -667,79 +839,10 @@ def main(args: argparse.Namespace):
         loss_scaler=loss_scaler,
         model_ema=model_ema,
     )
+        
 
-    if args.eval:
-        print(f"Eval only mode")
-        # test_stats = evaluate(data_loader_val, model, device)
-        # print(f"Accuracy of the network on {len(dataset_val)} test images: {test_stats['acc1']:.5f}%")
 
-        checkpoint = torch.load(
-            os.path.join(args.output_dir, "checkpoint-best.pth"), map_location="cpu"
-        )
-        print(
-            "Load pre-trained checkpoint from: %s"
-            % os.path.join(args.output_dir, "checkpoint-best.pth")
-        )
-
-        # load the model directly with the checkpoint
-        helpers.load_state_dict(model, checkpoint["model"], prefix=args.model_prefix)
-        model.to(device)
-
-        dataset_test, _ = build_dataset(split="test", args=args)
-        sampler_test = torch.utils.data.SequentialSampler(dataset_test)
-        data_loader_test = torch.utils.data.DataLoader(
-            dataset_test,
-            sampler=sampler_test,
-            batch_size=args.batch_size,
-            num_workers=args.num_workers,
-            pin_memory=args.pin_mem,
-            drop_last=False,
-        )
-
-        test_stats = evaluate(
-            data_loader_test, model, device, use_amp=args.use_amp, args=args
-        )
-
-        if args.data_set == "m-bigearthnet":
-            print(
-                f"mean AP of the model on the {len(dataset_test)} test images: {test_stats['meanAP']:.5f}"
-            )
-            test_score = test_stats["meanAP"]
-
-        elif (
-            args.data_set == "m-SA-crop-type"
-            or args.data_set == "m-cashew-plantation"
-        ):
-            print(
-                f"mIoU of the model on the {len(dataset_test)} test images: {test_stats['meanIoU']:.5f}"
-            )
-            test_score = test_stats["meanIoU"]
-        else:
-            print(
-                f"Accuracy of the model on the {len(dataset_test)} test images: {test_stats['acc1']:.1f}%"
-            )
-            test_score = test_stats["acc1"]
-
-        if helpers.is_main_process():
-            if (
-                args.data_set == "m-cashew-plantation"
-                or args.data_set == "m-SA-crop-type"
-            ):
-                file_str = f"unet--{args.data_set}--{args.pretraining}.txt"
-            else:
-                if args.percent is None and args.num_samples is None:
-                    file_str = f"{'lp' if args.linear_probe else 'ft'}--{args.data_set}--{args.pretraining}.txt"
-                else:
-                    text = (
-                        args.percent if args.percent is not None else args.num_samples
-                    )
-                    file_str = f"{'lp' if args.linear_probe else 'ft'}--{args.data_set}--{args.pretraining}--{text}.txt"
-            with open(
-                os.path.join("./test_scores/", file_str), mode="a", encoding="utf-8"
-            ) as f:
-                write_str = f"test score: {test_score}"
-                f.write(write_str)
-        return
+    ############################## MAIN TRAINING LOOP #############################
 
     max_accuracy = 0.0
     if args.model_ema and args.model_ema_eval:
@@ -750,8 +853,8 @@ def main(args: argparse.Namespace):
     for epoch in range(args.start_epoch, args.epochs):
         if log_writer is not None:
             log_writer.set_step(epoch * num_training_steps_per_epoch * args.update_freq)
-        if "convnextv2_unet" in args.model:
-            # for unet we probe for 200 epochs, and then fine-tune for 100 epochs
+        if "unet" in args.model:
+            # for unet we probe the decoder only for 50 epochs, and then fine-tune for 150 epochs
             if epoch == 50:
                 if "resnet" in args.model:
                     print("unfreezing the encoder part of the model")
@@ -790,6 +893,7 @@ def main(args: argparse.Namespace):
             mixup_fn,
             log_writer=log_writer,
             args=args,
+            task=task,
         )
         if args.output_dir and args.save_ckpt:
             if (epoch + 1) % args.save_ckpt_freq == 0 or epoch + 1 == args.epochs:
@@ -802,95 +906,36 @@ def main(args: argparse.Namespace):
                     epoch=epoch,
                     model_ema=model_ema,
                 )
+        
+        # validation        
         if val_dataloader is not None:
             val_samples = val_dataloader.reader.num_samples
             test_stats = evaluate(
-                val_dataloader, model, device, use_amp=args.use_amp, args=args
+                val_dataloader, model, device, use_amp=args.use_amp, args=args, task=task
             )
 
-            if args.data_set == "m-bigearthnet":
-                print(
-                    f"mean AP of the model on the {val_samples} test images: {test_stats['meanAP']:.5f}"
-                )
-                if max_accuracy < test_stats["meanAP"]:
-                    max_accuracy = test_stats["meanAP"]
-                    if args.output_dir and args.save_ckpt:
-                        helpers.save_model(
-                            args=args,
-                            model=model,
-                            model_without_ddp=model_without_ddp,
-                            optimizer=optimizer,
-                            loss_scaler=loss_scaler,
-                            epoch="best",
-                            model_ema=model_ema,
-                        )
+            logging_text = "Metric: "
+            for k, v in train_stats.items():
+                if k != "loss":
+                    logging_text += f"{k} - {v:.3f} "
+                    metric_key = k
+            logging_text += f" on {val_samples} test samples"   
+
+            if max_accuracy < test_stats[metric_key]:
+                max_accuracy = test_stats[metric_key]
+                if args.output_dir and args.save_ckpt:
+                    helpers.save_model(
+                        args=args,
+                        model=model,
+                        model_without_ddp=model_without_ddp,
+                        optimizer=optimizer,
+                        loss_scaler=loss_scaler,
+                        epoch="best",
+                        model_ema=model_ema,
+                    )
                 print(f"Max accuracy: {max_accuracy:.2f}%")
 
-                if log_writer is not None:
-                    log_writer.update(
-                        test_meanAP=test_stats["meanAP"], head="perf", step=epoch
-                    )
-                    log_writer.update(
-                        test_loss=test_stats["loss"], head="perf", step=epoch
-                    )
-            elif args.data_set in [
-                "m-SA-crop-type",
-                "m-cashew-plantation",
-                "m-cashew-plant",
-            ]:
-                print(
-                    f"mIoU of the model on the {val_samples} test images: {test_stats['meanIoU']:.5f}"
-                )
-                if max_accuracy < test_stats["meanIoU"]:
-                    max_accuracy = test_stats["meanIoU"]
-                    if args.output_dir and args.save_ckpt:
-                        helpers.save_model(
-                            args=args,
-                            model=model,
-                            model_without_ddp=model_without_ddp,
-                            optimizer=optimizer,
-                            loss_scaler=loss_scaler,
-                            epoch="best",
-                            model_ema=model_ema,
-                        )
-                print(f"Max accuracy: {max_accuracy:.2f}%")
-
-                if log_writer is not None:
-                    log_writer.update(
-                        test_mIoU=test_stats["meanIoU"], head="perf", step=epoch
-                    )
-                    log_writer.update(
-                        test_loss=test_stats["meanIoU"], head="perf", step=epoch
-                    )
-            else:
-                print(
-                    f"Accuracy of the model on the {val_samples} test images: {test_stats['acc1']:.1f}%"
-                )
-                if max_accuracy < test_stats["acc1"]:
-                    max_accuracy = test_stats["acc1"]
-                    if args.output_dir and args.save_ckpt:
-                        helpers.save_model(
-                            args=args,
-                            model=model,
-                            model_without_ddp=model_without_ddp,
-                            optimizer=optimizer,
-                            loss_scaler=loss_scaler,
-                            epoch="best",
-                            model_ema=model_ema,
-                        )
-                print(f"Max accuracy: {max_accuracy:.2f}%")
-
-                if log_writer is not None:
-                    log_writer.update(
-                        test_acc1=test_stats["acc1"], head="perf", step=epoch
-                    )
-                    if "acc5" in test_stats:
-                        log_writer.update(
-                            test_acc5=test_stats["acc5"], head="perf", step=epoch
-                        )
-                    log_writer.update(
-                        test_loss=test_stats["loss"], head="perf", step=epoch
-                    )
+    
 
             log_stats = {
                 **{f"train_{k}": v for k, v in train_stats.items()},
@@ -944,16 +989,26 @@ def main(args: argparse.Namespace):
                 os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8"
             ) as f:
                 f.write(json.dumps(log_stats) + "\n")
+    ###############################################################################
 
-    # run the final model on the test set if run_on_test is set to True
+
+
+
+
+    ################################ RUN ON TEST SET ################################
     if args.run_on_test:
         # use the best model
+        if args.data_set not in ["m-SA-crop-type", "m-cashew-plantation", "m-cashew-plant"]:
+            ckpt_file = 'checkpoint-99.pth'
+        else:
+            ckpt_file = 'checkpoint-199.pth'
+
         checkpoint = torch.load(
-            os.path.join(args.output_dir, "checkpoint-best.pth"), map_location="cpu"
+            os.path.join(args.output_dir, ckpt_file), map_location="cpu"
         )
         print(
             "Load pre-trained checkpoint from: %s"
-            % os.path.join(args.output_dir, "checkpoint-best.pth")
+            % os.path.join(args.output_dir, ckpt_file)
         )
 
         # load the model directly with the checkpoint
@@ -976,32 +1031,13 @@ def main(args: argparse.Namespace):
         print('test_loader data shape:', next(iter(test_loader))[0].shape)
 
         test_stats = evaluate(
-            test_loader, model, device, use_amp=args.use_amp, args=args
+            test_loader, model, device, use_amp=args.use_amp, args=args, task=task
         )
         test_samples = test_loader.reader.num_samples
-
-        if args.data_set == "m-bigearthnet":
-            print(
-                f"mean AP of the model on the {test_samples} test images: {test_stats['meanAP']:.5f}"
-            )
-            test_score = test_stats["meanAP"]
-
-        elif args.data_set in [
-            "m-SA-crop-type",
-            "m-cashew-plantation",
-            "m-cashew-plant",
-        ]:
-            print(
-                f"mIoU of the model on the {test_samples} test images: {test_stats['meanIoU']:.5f}"
-            )
-            test_score = test_stats["meanIoU"]
-        else:
-            print(
-                f"Accuracy of the model on the {test_samples} test images: {test_stats['acc1']:.1f}%"
-            )
-            test_score = test_stats["acc1"]
-
-        print(f"Final test set, score: {test_score}")
+        key = [k for k in test_stats.keys() if k != 'loss'][0]
+        print(f"Final test set - {test_samples} samples, score: {test_stats[key]:.3f}")
+        test_score = test_stats[key]
+        
 
         if helpers.is_main_process():
             if (
@@ -1018,6 +1054,7 @@ def main(args: argparse.Namespace):
 
             if not os.path.exists(args.test_scores_dir):
                 os.makedirs(args.test_scores_dir, exist_ok=True)
+
             with open(
                 os.path.join(args.test_scores_dir, file_str), mode="a", encoding="utf-8"
             ) as f:

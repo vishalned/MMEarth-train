@@ -20,7 +20,7 @@
 
 
 datasets=("m-cashew-plant" "m-SA-crop-type")
-pretraining="gassl"
+pretraining="seco"
 
 
 task_type="unet-lp&ft"
@@ -59,7 +59,7 @@ python -m main_finetune \
     --mixup 0. \
     --cutmix 0. \
     --smoothing 0 \
-    --finetune /projects/dereeco/data/global-lr/ConvNeXt-V2/results/gassl_pretrain/moco_tp.pth.tar \
+    --finetune /projects/dereeco/data/global-lr/ConvNeXt-V2/results/seco-pretrain/seco_resnet50_1m.pt \
     --output_dir "$output_dir" \
     --data_set "$dataset" \
     --linear_probe "$linear_probe" \

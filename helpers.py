@@ -401,7 +401,7 @@ def all_reduce_mean(x):
 
 
 def load_state_dict(
-    model, state_dict, prefix="", ignore_missing="relative_position_index"
+    model, state_dict, prefix="", ignore_missing="relative_position_index", quit=False
 ):
     missing_keys = []
     unexpected_keys = []
