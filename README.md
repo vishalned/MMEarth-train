@@ -19,16 +19,42 @@ See [INSTALL.md](https://github.com/vishalned/MMEarth-train/blob/main/INSTALL.md
 See [TRAINING.md](https://github.com/vishalned/MMEarth-train/blob/main/TRAINING.md) for more details on training and finetuning. 
 
 ## Model Checkpoints
-All the pretraining weights can be downloaded from [here](https://sid.erda.dk/sharelink/ECYWkytzcG). The folders are named in the following format. Inside the folder you will find a checkpoint `.pth` weight file. An example to load the weights is in the [examples](https://github.com/vishalned/MMEarth-train/tree/main/examples) folder.
+All the pretraining weights can be downloaded from [here](https://sid.erda.dk/sharelink/g23YOnaaTp). The folders are named in the format shown below. Inside the folder you will find a checkpoint `.pth` weight file. An example to load the weights is in the [examples](https://github.com/vishalned/MMEarth-train/tree/main/examples) folder.
 
 ```sh
-pt-all_mod_$MODEL_$DATA_$IMGSIZE_$LOSS/
+CHECKPOINT FOLDER FORMAT
+pt-($INPUT)_($MODEL)_($DATA)_($LOSS)_($MODEL_IMG_SIZE)_($PATCH_SIZE)/
 
-$MODEL: atto or tiny
-$DATA: 100k or 1M
-$IMGSIZE: 128 or 64
-$LOSS: uncertainty or unweighted # This is the loss weighting strategy. Most experiments in the paper were run using the uncertainty method. 
-# note that while the img size is 128 or 64, during pretraining we use a random crop to make the image sizes 112 and 56 respectively. 
+$INPUT:
+      - S2 # for s2-12 bands as input and output
+      - all_mod # for s2-12 bands as input and all modalities as output
+      - img_mod # for s2-12 bands as input and image level modalities as output
+      - pix_mod # for s2-12 bands as input and pixel level modalities as output
+      - rgb # for s2-bgr as input and output (we trained the model using bgr ordering)
+
+$MODEL:
+      - atto
+      - tiny
+
+$DATA:
+      - 100k_128 # MMEarth100k, 100k locations and image size 128
+      - 1M_64 # MMEarth64, 1.2M locations and image size 64
+      - 1M_128 # MMEarth, 1.2M locations and image size 128
+
+$LOSS: # loss weighting strategy
+      - uncertainty
+      - unweighted
+
+$MODEL_IMG_SIZE # input size passed to the model
+      - 56 # when using the data with image size 64
+      - 112 # when using the data with image size 128
+
+$PATCH_SIZE
+      - 8
+      - 16
+
+Note: The only exception is when using the model trained on imagenet, the folder path is pt-imagenet_atto_200epochs_224_32/
+
 ```
 
 
