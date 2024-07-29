@@ -42,8 +42,10 @@ def train_one_epoch(
     for data_iter_step, data in enumerate(
         metric_logger.log_every(data_loader, print_freq, header)
     ):
-
-        samples = helpers.make_modality_dict(data, modalities)
+        if not args.no_ffcv:
+            samples = helpers.make_modality_dict(data, modalities)
+        else:
+            samples = data[1]
 
         # we use a per iteration (instead of per epoch) lr scheduler
         if data_iter_step % update_freq == 0:

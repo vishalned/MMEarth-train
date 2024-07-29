@@ -230,7 +230,7 @@ def main(args):
         # for each batch append the samples of the same modality together and return the ids. We keep track of the ids to differentiate between sentinel2_l1c and sentinel2_l2a
             return_batch = {}
             ids = [b['id'] for b in batch]
-            return_batch = {modality: torch.stack([b[modality] for b in batch], dim=0) for modality in args.modalities.keys()}
+            return_batch = {modality: torch.stack([torch.from_numpy(b[modality]) for b in batch], dim=0) for modality in args.modalities.keys()}
             return ids, return_batch
         
         dataset = get_mmearth_dataloaders(
@@ -239,8 +239,10 @@ def main(args):
             args.modalities,
             num_workers=args.num_workers,
             batch_size_per_device=args.batch_size,
-            distributed=args.distributed
+            distributed=args.distributed,
+            no_ffcv=args.no_ffcv,
         )[0] # non ffcv mode returns only the dataset object
+
 
         sampler_train = torch.utils.data.DistributedSampler(
             dataset, num_replicas=num_tasks, rank=global_rank, shuffle=True, seed=args.seed,
@@ -249,7 +251,6 @@ def main(args):
             dataset, sampler=sampler_train,
             batch_size=args.batch_size,
             num_workers=args.num_workers,
-            pin_memory=args.pin_mem,
             drop_last=True,
             collate_fn=collate_fn,
         )

@@ -254,9 +254,14 @@ def get_geobench_dataloaders(
         beton_file = processed_dir / f"{split}_{dataset_name}_{partition}{subset}{bands_type}.beton"
 
         if not beton_file.exists() or no_ffcv:
-            print(
-                f"Processed file {beton_file} does not exist, trying to create it now."
-            )
+            if not beton_file.exists():
+                print(
+                    f"Processed file {beton_file} does not exist, trying to create it now."
+                )
+            else:
+                print(
+                    f"Skipping creation of beton file {beton_file} as no_ffcv is set to True."
+                )
             transform = None
             dataset = GeobenchDataset(
                 dataset_name=dataset_name,

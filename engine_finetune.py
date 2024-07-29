@@ -70,7 +70,7 @@ def train_one_epoch(
     )
     header = "Epoch: [{}]".format(epoch)
     print_freq = 20
-    metric = eval_metrics_generator(task)
+    metric = eval_metrics_generator(task).to(device)
     update_freq = args.update_freq
     use_amp = args.use_amp
     optimizer.zero_grad()
