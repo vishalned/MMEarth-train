@@ -157,13 +157,12 @@ def get_args_parser():
     parser.add_argument("--sparse", type=str2bool, default=True)
     parser.add_argument("--debug", type=str2bool, default=False)
     parser.add_argument("--distributed", type=str2bool, default=False)
+    parser.add_argument("--no_ffcv", type=str2bool, default=True)
 
     return parser
 
 
 def main(args):
-
-
 
 
     if args.distributed:
@@ -209,24 +208,53 @@ def main(args):
     np.random.seed(seed)
 
     cudnn.benchmark = True
-
-    # custom multimodal dataset
-    train_dataloader = get_mmearth_dataloaders(
-        args.data_dir,
-        args.processed_dir,
-        args.modalities,
-        num_workers=args.num_workers,
-        batch_size_per_device=args.batch_size,
-        distributed=args.distributed,
-        indices=(
-            [np.arange(10)] if args.debug else None
-        ),  # only 10 samples if debug is enabled
-    )[0]
-    len_dataset = train_dataloader.reader.num_samples
-
     num_tasks = helpers.get_world_size()
     global_rank = helpers.get_rank()
 
+    # custom multimodal dataset
+    if not args.no_ffcv:
+        train_dataloader = get_mmearth_dataloaders(
+            args.data_dir,
+            args.processed_dir,
+            args.modalities,
+            num_workers=args.num_workers,
+            batch_size_per_device=args.batch_size,
+            distributed=args.distributed,
+            indices=(
+                [np.arange(10)] if args.debug else None
+            ),  # only 10 samples if debug is enabled
+        )[0]
+        len_dataset = train_dataloader.reader.num_samples
+    else:
+        def collate_fn(batch):
+        # for each batch append the samples of the same modality together and return the ids. We keep track of the ids to differentiate between sentinel2_l1c and sentinel2_l2a
+            return_batch = {}
+            ids = [b['id'] for b in batch]
+            return_batch = {modality: torch.stack([b[modality] for b in batch], dim=0) for modality in args.modalities.keys()}
+            return ids, return_batch
+        
+        dataset = get_mmearth_dataloaders(
+            args.data_dir,
+            args.processed_dir,
+            args.modalities,
+            num_workers=args.num_workers,
+            batch_size_per_device=args.batch_size,
+            distributed=args.distributed
+        )[0] # non ffcv mode returns only the dataset object
+
+        sampler_train = torch.utils.data.DistributedSampler(
+            dataset, num_replicas=num_tasks, rank=global_rank, shuffle=True, seed=args.seed,
+        )
+        train_dataloader = torch.utils.data.DataLoader(
+            dataset, sampler=sampler_train,
+            batch_size=args.batch_size,
+            num_workers=args.num_workers,
+            pin_memory=args.pin_mem,
+            drop_last=True,
+            collate_fn=collate_fn,
+        )
+        len_dataset = len(dataset)
+    
     if global_rank == 0 and args.log_dir is not None:
         os.makedirs(args.log_dir, exist_ok=True)
         # log_writer = SummaryWriter(log_dir=args.log_dir)
@@ -309,8 +337,8 @@ def main(args):
     start_time = time.time()
     for epoch in range(args.start_epoch, args.epochs):
         # not needed for ffcv? we do not recompile
-        # if args.distributed:
-        #     train_dataloader.sampler.set_epoch(epoch)
+        if args.distributed and args.no_ffcv:
+            train_dataloader.sampler.set_epoch(epoch)
         if log_writer is not None:
             log_writer.set_step(epoch * num_training_steps_per_epoch * args.update_freq)
         train_stats, loss_dict, log_var_list, normalized_loss_list = train_one_epoch(

@@ -100,8 +100,7 @@ def train_one_epoch(
         ):
             output = model(samples)
             if (
-                args.data_set == "m-cashew-plantation"
-                or args.data_set == "m-SA-crop-type"
+                task.label_type.__class__ == SegmentationClasses
             ):
                 # make output class the last dimension
                 output = output.permute(0, 2, 3, 1)
@@ -155,22 +154,16 @@ def train_one_epoch(
         if device.__str__ == "cuda":
             torch.cuda.synchronize()
 
-        if args.data_set == "m-bigearthnet":
-            # for bigearthnet we calculate the mean average precision since that is used a lot for multi-label classification
-            # we use the sigmoid function to get the probabilities
-            out_p = torch.sigmoid(output)
-        elif (
-            args.data_set == "m-cashew-plantation"
-            or args.data_set == "m-SA-crop-type"
+        if (
+            task.label_type.__class__ == SegmentationClasses
         ):
             # for segmentation we calculate the mean intersection over union, hence the jaccard index
             output = output.permute(0, 3, 1, 2) # N, C, H, W
-            out_p = torch.nn.functional.softmax(output, dim=1)
-            num_classes = 7 if args.data_set == "m-cashew-plantation" else 10
+            output = torch.nn.functional.softmax(output, dim=1) # argmax already applied in the metric
             targets = targets.squeeze(1)
 
 
-        score = metric(output, targets)
+        score = metric(output, targets) # for bigearthnet, sigmoid is already applied in the metric
 
         metric_logger.update(loss=loss_value)
         # metric_logger.update(score=score)
@@ -212,11 +205,10 @@ def train_one_epoch(
 def evaluate(data_loader, model, device, use_amp=False, args=None, task=None):
     data_set = args.data_set
     # for bigearthnet, we use BCE loss
-    if data_set == "m-bigearthnet":
+    if task.label_type.__class__ == MultiLabelClassification:
         criterion = torch.nn.BCEWithLogitsLoss()
     elif (
-        data_set == "m-cashew-plantation"
-        or data_set == "m-SA-crop-type"
+        task.label_type.__class__ == SegmentationClasses
     ):
         criterion = torch.nn.CrossEntropyLoss()
     else:
@@ -252,8 +244,7 @@ def evaluate(data_loader, model, device, use_amp=False, args=None, task=None):
                 output = output["logits"]
 
             if (
-                data_set == "m-cashew-plantation"
-                or data_set == "m-SA-crop-type"
+                task.label_type.__class__ == SegmentationClasses
             ):
                 output = output.permute(0, 2, 3, 1)
 
@@ -263,30 +254,28 @@ def evaluate(data_loader, model, device, use_amp=False, args=None, task=None):
                 target_tmp = target_tmp.squeeze(1)
                 target_tmp = target_tmp.long()
             else:
-                if data_set == "m-bigearthnet":
+                if task.label_type.__class__ == MultiLabelClassification:
                     target_tmp = target.float()
                     output_tmp = output
                 else:
                     target_tmp = target
                     output_tmp = output
-            # loss = criterion(output, target)
+
             loss = criterion(output_tmp, target_tmp)
 
         if device.__str__ == "cuda":
             torch.cuda.synchronize()
 
-        if data_set == "m-bigearthnet":
-            out_p = torch.sigmoid(output)
-        elif (
-            data_set == "m-cashew-plantation"
+    
+        if (
+            data_set == "m-cashew-plant"
             or data_set == "m-SA-crop-type"
         ):
             output = output.permute(0, 3, 1, 2)
-            out_p = torch.nn.functional.softmax(output, dim=1)
-            out_p = torch.argmax(out_p, dim=1)
+            output = torch.nn.functional.softmax(output, dim=1) # argmax already applied in the metric
             target = target.squeeze(1)
 
-        score = metric(output, target)
+        score = metric(output, target) # for bigearthnet, sigmoid is already applied in the metric
 
         batch_size = images.shape[0] # this can be used on the metric_logger update function if needed.
         metric_logger.update(loss=loss.item())

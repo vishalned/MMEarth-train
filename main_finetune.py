@@ -31,9 +31,12 @@ from custom_loss import LabelSmoothingBinaryCrossEntropy
 from datasets import build_dataset
 from engine_finetune import train_one_epoch, evaluate
 from geobenchdataset import get_geobench_dataloaders
+from geobench.dataset import SegmentationClasses
+from geobench.label import Classification, MultiLabelClassification
 from helpers import NativeScalerWithGradNormCount as NativeScaler
-from helpers import str2bool, remap_checkpoint_keys
+from helpers import str2bool, remap_checkpoint_keys, load_custom_checkpoint
 from optim_factory import create_optimizer, LayerDecayValueAssigner
+
 
 
 def get_args_parser():
@@ -399,6 +402,7 @@ def get_args_parser():
     parser.add_argument("--debug", type=str2bool, default=False)
     parser.add_argument("--version", type=str, default="0.9.1")
     parser.add_argument("--nb_classes", default=10, type=int)
+    parser.add_argument("--no_ffcv", type=str2bool, default=False)
     return parser
 
 
@@ -428,6 +432,7 @@ def main(args: argparse.Namespace):
         indices=[list(range(10)), list(range(10))] if args.debug else None,
         version=args.version,
         geobench_bands_type=args.geobench_bands_type,
+        no_ffcv=args.no_ffcv,
     )
     num_classes = task.label_type.n_classes
     # in_channels = len(task.band_stats) - 1 # without label
@@ -439,11 +444,6 @@ def main(args: argparse.Namespace):
     num_tasks = helpers.get_world_size()
     global_rank = helpers.get_rank()
 
-
-    ###### QUICK FIX FOR CASHEW PLANTATION DATASET ######
-    if args.data_set == "m-cashew-plant":
-        args.data_set = "m-cashew-plantation"
-    #####################################################
 
     if global_rank == 0 and args.log_dir is not None:
         os.makedirs(args.log_dir, exist_ok=True)
@@ -468,6 +468,7 @@ def main(args: argparse.Namespace):
         )
 
     ############################## LOADING MODEL AND FREEZING/UNFREEING MODEL #############################
+
     if "convnextv2_unet" in args.model:
         model = convnextv2_unet.__dict__[args.model](
             num_classes=num_classes,
@@ -504,210 +505,8 @@ def main(args: argparse.Namespace):
             in_chans=in_channels,
         )
 
-    # finetune or linear probing and loading the pre trained models
-    if not args.linear_probe: # finetuning
-        if "unet" in args.model:
-            raise ValueError(
-                "All experiments were done with a combination of linear probe and fine-tuning. Please set the --linear_probe to True, to enable linear probe."
-            )
-        checkpoint = torch.load(args.finetune, map_location="cpu")
-        print("Load pre-trained checkpoint from: %s" % args.finetune)
-        checkpoint_model = checkpoint["model"] if "model" in checkpoint else checkpoint
-        state_dict = model.state_dict()
-        for k in ["head.weight", "head.bias"]:
-            if (
-                k in checkpoint_model
-                and checkpoint_model[k].shape != state_dict[k].shape
-            ):
-                print(f"Removing key {k} from pretrained checkpoint")
-                del checkpoint_model[k]
-
-        # remove decoder weights
-        checkpoint_model_keys = list(checkpoint_model.keys())
-        for k in checkpoint_model_keys:
-            if "decoder" in k or "mask_token" in k or "proj" in k or "pred" in k:
-                print(f"Removing key {k} from pretrained checkpoint")
-                del checkpoint_model[k]
-
-        if 'seco' in args.finetune:
-            # for the seco model, the pretrained weights has encoder_q and encoder_k, so we need to remove these keys from the pretrained weights
-            # and only choose the encoder_q weights. We then replace the term encoder_q with the corresponding terms in the
-            # resnet model
-            checkpoint_model_keys = list(checkpoint_model.keys())
-            for k in checkpoint_model_keys:
-                if 'encoder_k' in k or 'queue' in k or 'heads' in k:
-                    print(f"Removing key {k} from pretrained checkpoint")
-                    del checkpoint_model[k]
-
-            for k, v in zip(list(model.state_dict().keys())[:-2], list(checkpoint_model.keys())):
-                new_v = k
-                checkpoint_model[new_v] = checkpoint_model.pop(v)
-
-        elif 'gassl' in args.finetune:
-            checkpoint_model_state_dict = checkpoint_model['state_dict']
-            # first we remove module prefix from the keys
-            checkpoint_model_state_dict = {k.replace('module.', ''): v for k, v in checkpoint_model_state_dict.items()}
-            
-            checkpoint_model = checkpoint_model_state_dict.copy()
-            for k in checkpoint_model_state_dict:
-                if 'encoder_k' in k or 'queue' in k or 'heads' in k:
-                    print(f"Removing key {k} from pretrained checkpoint")
-                    del checkpoint_model[k]
-            for k, v in zip(list(model.state_dict().keys())[:-2], list(checkpoint_model.keys())):
-                new_v = k
-                checkpoint_model[new_v] = checkpoint_model.pop(v)
-        else:
-            checkpoint_model = remap_checkpoint_keys(checkpoint_model)
-
-        # checkpoint_model = remap_checkpoint_keys(checkpoint_model)
-        helpers.load_state_dict(model, checkpoint_model, prefix=args.model_prefix)
-        
-        # manually initialize fc layer
-        if 'resnet' in args.model:
-            in_features = model.fc.in_features
-            model.fc = torch.nn.Linear(in_features, args.nb_classes)
-            model.fc.weight.requires_grad = True
-            model.fc.bias.requires_grad = True
-            # manually initialize the new head like how its done in the fine-tuning part above
-            trunc_normal_(model.fc.weight, std=2e-5)
-            torch.nn.init.constant_(model.fc.bias, 0.)
-        else:
-            trunc_normal_(model.head.weight, std=2e-5)
-            torch.nn.init.constant_(model.head.bias, 0.)
-
-
-    elif args.linear_probe: # linear probe
-        # we still start with the same fine-tuning pre-trained model, and then remove the head. we then make the model frozen, and add a new head for linear probe
-        checkpoint = torch.load(args.finetune, map_location="cpu")
-
-        print("Load pre-trained checkpoint from: %s" % args.finetune)
-        checkpoint_model = checkpoint["model"] if "model" in checkpoint else checkpoint
-        state_dict = model.state_dict()
-        for k in ["head.weight", "head.bias"]:
-            if (
-                k in checkpoint_model
-                and checkpoint_model[k].shape != state_dict[k].shape
-            ):
-                print(f"Removing key {k} from pretrained checkpoint")
-                del checkpoint_model[k]
-
-        # remove decoder weights
-        checkpoint_model_keys = list(checkpoint_model.keys())
-        for k in checkpoint_model_keys:
-            if "decoder" in k or "mask_token" in k or "proj" in k or "pred" in k:
-                print(f"Removing key {k} from pretrained checkpoint")
-                del checkpoint_model[k]
-
-        if 'seco' in args.finetune:
-            # for the seco model, the pretrained weights has encoder_q and encoder_k, so we need to remove these keys from the pretrained weights
-            # and only choose the encoder_q weights. We then replace the term encoder_q with the corresponding terms in the
-            # resnet model
-            checkpoint_model_keys = list(checkpoint_model.keys())
-            for k in checkpoint_model_keys:
-                if 'encoder_k' in k or 'queue' in k or 'heads' in k:
-                    print(f"Removing key {k} from pretrained checkpoint")
-                    del checkpoint_model[k]
-            if 'unet' in args.model:
-                # rename encoder_q to encoder
-                encoder_keys = [k for k in model.state_dict().keys() if 'encoder' in k]
-                for k, v in zip(encoder_keys, list(checkpoint_model.keys())):
-                    new_v = k
-                    checkpoint_model[new_v] = checkpoint_model.pop(v)
-            else:
-                for k, v in zip(list(model.state_dict().keys())[:-2], list(checkpoint_model.keys())):
-                    new_v = k
-                    checkpoint_model[new_v] = checkpoint_model.pop(v)
-
-        elif 'gassl' in args.finetune:
-            checkpoint_model_state_dict = checkpoint_model['state_dict']
-            # first we remove module prefix from the keys
-            checkpoint_model_state_dict = {k.replace('module.', ''): v for k, v in checkpoint_model_state_dict.items()}
-            
-            checkpoint_model = checkpoint_model_state_dict.copy()
-            for k in checkpoint_model_state_dict:
-                if 'encoder_k' in k or 'queue' in k or 'heads' in k:
-                    print(f"Removing key {k} from pretrained checkpoint")
-                    del checkpoint_model[k]     
-            if 'unet' in args.model:
-                # rename encoder_q to encoder
-                checkpoint_model = {k.replace('encoder_q', 'encoder'): v for k, v in checkpoint_model.items()}
-            else:
-                for k, v in zip(list(model.state_dict().keys())[:-2], list(checkpoint_model.keys())):
-                    new_v = k
-                    checkpoint_model[new_v] = checkpoint_model.pop(v)
-        elif 'satlas' in args.finetune and 'unet' in args.model:
-            encoder_keys = [k for k in model.state_dict().keys() if 'encoder' in k]
-            for k, v in zip(encoder_keys, list(checkpoint_model.keys())):
-                new_v = k
-                checkpoint_model[new_v] = checkpoint_model.pop(v)
-
-        else:
-            checkpoint_model = remap_checkpoint_keys(checkpoint_model)
-        helpers.load_state_dict(model, checkpoint_model, prefix=args.model_prefix)
-
-
-
-        if 'convnextv2_unet' in args.model:
-            print("---unfreezing the decoder part of the model for unet---")
-            # we need to freeze the encoder part of the model
-            for param in model.parameters():
-                param.requires_grad = False
-            
-            model.head.weight.requires_grad = True
-            model.head.bias.requires_grad = True
-
-            # we also have a list of upsample layers with upsample blocks in the model
-            for layer in model.upsample_layers:
-                for param in layer.parameters():
-                    param.requires_grad = True
-            
-            for param in model.initial_conv_upsample.parameters():
-                param.requires_grad = True
-        elif 'resnet' in args.model and 'unet' in args.model:
-
-            print("---unfreezing the decoder part of the model for unet---")
-            # we need to freeze the encoder part of the model
-            for param in model.encoder.parameters():
-                param.requires_grad = False
-
-            model.decoder.requires_grad = True
-            model.segmentation_head.requires_grad = True
-
-
-        elif 'resnet' in args.model:
-            in_features = model.fc.in_features
-            model.fc = torch.nn.Identity()
-
-            # freeze the model
-            for param in model.parameters():
-                param.requires_grad = False
-
-            # add a new head
-            model.fc = torch.nn.Linear(in_features, args.nb_classes)
-            model.fc.weight.requires_grad = True
-            model.fc.bias.requires_grad = True
-
-            # manually initialize the new head like how its done in the fine-tuning part above
-            trunc_normal_(model.fc.weight, std=2e-5)
-            torch.nn.init.constant_(model.fc.bias, 0.)
-        else:
-            in_features = model.head.in_features
-            model.head = torch.nn.Identity()
-
-            # freeze the model
-            for param in model.parameters():
-                param.requires_grad = False
-
-            # add a new head
-            model.head = torch.nn.Linear(in_features, args.nb_classes)
-            model.head.weight.requires_grad = True
-            model.head.bias.requires_grad = True
-
-
-            # manually initialize the new head like how its done in the fine-tuning part above
-            trunc_normal_(model.head.weight, std=2e-5)
-            torch.nn.init.constant_(model.head.bias, 0.)
-
+    model,checkpoint_model = load_custom_checkpoint(model, args) # freezing and unfreezing is done in this function
+    
     model.to(device)
     ####################################################################################################
 
@@ -794,7 +593,7 @@ def main(args: argparse.Namespace):
         # for segmentations problems we ensure that smoothing is not applied
         criterion = torch.nn.CrossEntropyLoss()
 
-    if args.data_set == "m-bigearthnet":
+    if task.label_type.__class__ == MultiLabelClassification:
         criterion = LabelSmoothingBinaryCrossEntropy(smoothing=args.smoothing)
     print("criterion = %s" % str(criterion))
     ##########################################################################
@@ -804,30 +603,30 @@ def main(args: argparse.Namespace):
 
 
     ###### TMP FIX FOR SEGMENTATION DATASET WHEN ONLY RUNNING ON TEST ######
-    if args.data_set in ["m-cashew-plantation", "m-SA-crop-type", "m-cahew-plant"]:
-        if "resnet" in args.model:
-            print("resnet: unfreezing the encoder part of the model")
-            for param in model.encoder.parameters():
-                param.requires_grad = True
-            optimizer.add_param_group({"params": model.encoder.parameters()})
-        else:
-            print("Unfreezing the encoder part of the model")
-            for param in model.parameters():
-                param.requires_grad = True
+    # if task.label_type.__class__ == SegmentationClasses:
+    #     if "resnet" in args.model:
+    #         print("resnet: unfreezing the encoder part of the model")
+    #         for param in model.encoder.parameters():
+    #             param.requires_grad = True
+    #         optimizer.add_param_group({"params": model.encoder.parameters()})
+        # else:
+        #     print("Unfreezing the encoder part of the model")
+        #     for param in model.parameters():
+        #         param.requires_grad = True
 
-            optimizer.add_param_group(
-                {"params": model.downsample_layers.parameters()}
-            )
-            optimizer.add_param_group({"params": model.stages.parameters()})
-            if args.use_orig_stem:
-                optimizer.add_param_group(
-                    {"params": model.stem_orig.parameters()}
-                )
-            else:
-                optimizer.add_param_group(
-                    {"params": model.initial_conv.parameters()}
-                )
-                optimizer.add_param_group({"params": model.stem.parameters()})
+        #     optimizer.add_param_group(
+        #         {"params": model.downsample_layers.parameters()}
+        #     )
+        #     optimizer.add_param_group({"params": model.stages.parameters()})
+        #     if args.use_orig_stem:
+        #         optimizer.add_param_group(
+        #             {"params": model.stem_orig.parameters()}
+        #         )
+        #     else:
+        #         optimizer.add_param_group(
+        #             {"params": model.initial_conv.parameters()}
+        #         )
+        #         optimizer.add_param_group({"params": model.stem.parameters()})
     ##############################################################################
     
 
@@ -997,8 +796,8 @@ def main(args: argparse.Namespace):
 
     ################################ RUN ON TEST SET ################################
     if args.run_on_test:
-        # use the best model
-        if args.data_set not in ["m-SA-crop-type", "m-cashew-plantation", "m-cashew-plant"]:
+        # use the last model
+        if task.label_type.__class__ != SegmentationClasses:
             ckpt_file = 'checkpoint-99.pth'
         else:
             ckpt_file = 'checkpoint-199.pth'
@@ -1025,6 +824,7 @@ def main(args: argparse.Namespace):
             indices=[list(range(10))] if args.debug else None,
             version=args.version,
             geobench_bands_type=args.geobench_bands_type,
+            no_ffcv=args.no_ffcv,
             
         )
 
@@ -1041,8 +841,7 @@ def main(args: argparse.Namespace):
 
         if helpers.is_main_process():
             if (
-                args.data_set == "m-cashew-plantation"
-                or args.data_set == "m-SA-crop-type"
+                task.label_type.__class__ == SegmentationClasses
             ):
                 file_str = f"unet_lp&ft--{args.data_set}--{args.pretraining}.txt"
             else:

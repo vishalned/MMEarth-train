@@ -1,5 +1,6 @@
 # Description: This file contains the modalities that you wish to use for training
 # Provide all the modalities that you wish to use for training, and also the corresponding bands
+# NOTE: THE MAIN DICT TO CHANGE IS THE INP_MODALITIES AND OUT_MODALITIES. 
 import os
 from pathlib import Path
 
@@ -68,9 +69,6 @@ INP_MODALITIES = {
     ],
 }
 
-RGB_MODALITIES = {
-    "sentinel2": ["B2", "B3", "B4"],
-}
 
 # Output modalities for training
 OUT_MODALITIES = {
@@ -101,7 +99,12 @@ OUT_MODALITIES = {
     "esa_worldcover": "all",
 }
 
-# an example of all the modalities. DO NOT CHANGE THIS, ALWAYS CHANGE THE MODALITIES ABOVE
+
+RGB_MODALITIES = {
+    "sentinel2": ["B2", "B3", "B4"],
+}
+
+# an example of all the modalities. DO NOT CHANGE THIS, ALWAYS CHANGE THE INP and OUT MODALITIES ABOVE
 MODALITIES_FULL = {
     "sentinel2": [
         "B1",

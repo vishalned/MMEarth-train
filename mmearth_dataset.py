@@ -4,14 +4,21 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Union
 
-import ffcv
+
 import h5py
 import numpy as np
-from ffcv import DatasetWriter
-from ffcv.fields import NDArrayField
-from ffcv.fields.ndarray import NDArrayDecoder
-from ffcv.loader import OrderOption
-from ffcv.transforms import ToTensor
+
+try:
+    import ffcv
+    from ffcv import DatasetWriter
+    from ffcv.fields import NDArrayField
+    from ffcv.fields.ndarray import NDArrayDecoder
+    from ffcv.loader import OrderOption
+    from ffcv.transforms import ToTensor
+except ImportError:
+    print("FFCV not installed, please install it to use the beton file creation.")
+
+import torch
 from torch.utils.data import Dataset
 
 import MODALITIES
@@ -176,6 +183,7 @@ def get_mmearth_dataloaders(
     num_workers: int,
     batch_size_per_device: int,
     splits: list[str] = None,
+    no_ffcv: bool = False,
     indices: list[list[int]] = None,
     distributed: bool = False,
 ) -> list[Union[ffcv.Loader]]:
@@ -241,6 +249,9 @@ def get_mmearth_dataloaders(
     """
     if splits is None:
         splits = ["train"]
+    assert not no_ffcv or (
+        no_ffcv and indices is None
+    ), "Providing indices is not supported in no_ffcv mode."
     assert indices is None or (len(indices) == len(splits)), (
         "If indices are given, the number of splits and number of list of indices"
         "must align (len(indices) != len(splits) = ({len(indices)} != {len(splits))}"
@@ -256,12 +267,18 @@ def get_mmearth_dataloaders(
         is_train = split == "train"
         subset = "" if indices is None else "_subset"
         beton_file = processed_dir / f"{split}{subset}.beton"
+        args = create_MMEearth_args(data_dir, modalities)
 
+        if no_ffcv:
+            
+            dataset = MMEarthDataset(args, split=split, return_tuple=False)
+            
+            dataloaders.append(dataset)
+            continue
         if not beton_file.exists():
             print(
                 f"Processed file {beton_file} does not exist, trying to create it now."
             )
-            args = create_MMEearth_args(data_dir, modalities)
             dataset = MMEarthDataset(args, split=split, return_tuple=True)
 
             if len(dataset) == 0:

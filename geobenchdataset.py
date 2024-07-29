@@ -5,11 +5,15 @@ from typing import Tuple
 import ffcv
 import geobench
 import numpy as np
-from ffcv import DatasetWriter
-from ffcv.fields.basics import IntDecoder, IntField
-from ffcv.fields.ndarray import NDArrayDecoder, NDArrayField
-from ffcv.loader import OrderOption
-from ffcv.transforms import ToTensor, Squeeze
+try:
+    from ffcv import DatasetWriter
+    from ffcv.fields.basics import IntDecoder, IntField
+    from ffcv.fields.ndarray import NDArrayDecoder, NDArrayField
+    from ffcv.loader import OrderOption
+    from ffcv.transforms import ToTensor, Squeeze
+except ImportError:
+    print("FFCV not installed, please install it if you want to use the beton file format with ffcv")
+    
 from geobench import (
     TaskSpecifications,
     MultiLabelClassification,
@@ -28,7 +32,7 @@ GEOBENCH_TASK = {
 }
 
 
-def get_band_names(version="0.9.1", geobench_bands_type="full"):
+def get_band_names(version="1.0", geobench_bands_type="full"):
     if version == "1.0":
         if geobench_bands_type == "full":
             with open("BAND_NAMES_v1_full.json", "r") as f:
@@ -39,11 +43,8 @@ def get_band_names(version="0.9.1", geobench_bands_type="full"):
         elif geobench_bands_type == "bgr":    
             with open("BAND_NAMES_v1_bgr.json", "r") as f:
                 return json.load(f)
-    elif version == "0.9.1":
-        with open("BAND_NAMES.json", "r") as f:
-            return json.load(f)
     else:
-        raise NotImplementedError("Only supporting version 0.9.1 and 1.0")
+        raise NotImplementedError("Only supporting version 1.0")
 
 
 class GeobenchDataset(Dataset):
@@ -53,7 +54,7 @@ class GeobenchDataset(Dataset):
         split="train",
         transform=None,
         partition: str = "default",
-        version: str = "0.9.1",
+        version: str = "1.0",
         geobench_bands_type: str = "full",
     ):
         if split == "val":
@@ -166,7 +167,7 @@ def get_geobench_dataloaders(
     no_ffcv: bool = False,
     indices: list[list[int]] = None,
     distributed: bool = False,
-    version: str = "0.9.1",
+    version: str = "1.0",
     geobench_bands_type: str = "full",
 ) -> Tuple[list[ffcv.Loader], TaskSpecifications]:
     """
@@ -238,8 +239,6 @@ def get_geobench_dataloaders(
     processed_dir.mkdir(exist_ok=True)
 
     dataloaders = []
-    if dataset_name == 'm-cashew-plantation' and version == '1.0':
-        dataset_name = 'm-cashew-plant'
     task, _ = GeobenchDataset.get_task(dataset_name, version)
     for i, split in enumerate(splits):
         is_train = split == "train"

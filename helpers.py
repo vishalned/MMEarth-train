@@ -13,6 +13,7 @@ import time
 from collections import defaultdict, deque
 from pathlib import Path
 from typing import List, Dict, Union, AnyStr
+from timm.models.layers import trunc_normal_
 
 import numpy as np
 import torch
@@ -793,3 +794,210 @@ def make_modality_dict(
     for i, modality in enumerate(modalities):
         return_dict[modality] = data[i]
     return return_dict
+
+
+def load_custom_checkpoint(model, args):
+    if not args.linear_probe: # finetuning
+        if "unet" in args.model:
+            raise ValueError(
+                "All experiments were done with a combination of linear probe and fine-tuning. Please set the --linear_probe to True, to enable linear probe."
+            )
+        checkpoint = torch.load(args.finetune, map_location="cpu")
+        print("Load pre-trained checkpoint from: %s" % args.finetune)
+        checkpoint_model = checkpoint["model"] if "model" in checkpoint else checkpoint
+        state_dict = model.state_dict()
+        for k in ["head.weight", "head.bias"]:
+            if (
+                k in checkpoint_model
+                and checkpoint_model[k].shape != state_dict[k].shape
+            ):
+                print(f"Removing key {k} from pretrained checkpoint")
+                del checkpoint_model[k]
+
+        # remove decoder weights
+        checkpoint_model_keys = list(checkpoint_model.keys())
+        for k in checkpoint_model_keys:
+            if "decoder" in k or "mask_token" in k or "proj" in k or "pred" in k:
+                print(f"Removing key {k} from pretrained checkpoint")
+                del checkpoint_model[k]
+
+        if 'seco' in args.finetune:
+            # for the seco model, the pretrained weights has encoder_q and encoder_k, so we need to remove these keys from the pretrained weights
+            # and only choose the encoder_q weights. We then replace the term encoder_q with the corresponding terms in the
+            # resnet model
+            checkpoint_model_keys = list(checkpoint_model.keys())
+            for k in checkpoint_model_keys:
+                if 'encoder_k' in k or 'queue' in k or 'heads' in k:
+                    print(f"Removing key {k} from pretrained checkpoint")
+                    del checkpoint_model[k]
+
+            for k, v in zip(list(model.state_dict().keys())[:-2], list(checkpoint_model.keys())):
+                new_v = k
+                checkpoint_model[new_v] = checkpoint_model.pop(v)
+
+        elif 'gassl' in args.finetune:
+            checkpoint_model_state_dict = checkpoint_model['state_dict']
+            # first we remove module prefix from the keys
+            checkpoint_model_state_dict = {k.replace('module.', ''): v for k, v in checkpoint_model_state_dict.items()}
+            
+            checkpoint_model = checkpoint_model_state_dict.copy()
+            for k in checkpoint_model_state_dict:
+                if 'encoder_k' in k or 'queue' in k or 'heads' in k:
+                    print(f"Removing key {k} from pretrained checkpoint")
+                    del checkpoint_model[k]
+            for k, v in zip(list(model.state_dict().keys())[:-2], list(checkpoint_model.keys())):
+                new_v = k
+                checkpoint_model[new_v] = checkpoint_model.pop(v)
+        else:
+            checkpoint_model = remap_checkpoint_keys(checkpoint_model)
+
+        load_state_dict(model, checkpoint_model, prefix=args.model_prefix)
+        
+        # manually initialize fc layer
+        if 'resnet' in args.model:
+            in_features = model.fc.in_features
+            model.fc = torch.nn.Linear(in_features, args.nb_classes)
+            model.fc.weight.requires_grad = True
+            model.fc.bias.requires_grad = True
+            # manually initialize the new head like how its done in the fine-tuning part above
+            trunc_normal_(model.fc.weight, std=2e-5)
+            torch.nn.init.constant_(model.fc.bias, 0.)
+        else:
+            trunc_normal_(model.head.weight, std=2e-5)
+            torch.nn.init.constant_(model.head.bias, 0.)
+
+
+    elif args.linear_probe: # linear probe
+        # we still start with the same fine-tuning pre-trained model, and then remove the head. we then make the model frozen, and add a new head for linear probe
+        checkpoint = torch.load(args.finetune, map_location="cpu")
+
+        print("Load pre-trained checkpoint from: %s" % args.finetune)
+        checkpoint_model = checkpoint["model"] if "model" in checkpoint else checkpoint
+        state_dict = model.state_dict()
+        for k in ["head.weight", "head.bias"]:
+            if (
+                k in checkpoint_model
+                and checkpoint_model[k].shape != state_dict[k].shape
+            ):
+                print(f"Removing key {k} from pretrained checkpoint")
+                del checkpoint_model[k]
+
+        # remove decoder weights
+        checkpoint_model_keys = list(checkpoint_model.keys())
+        for k in checkpoint_model_keys:
+            if "decoder" in k or "mask_token" in k or "proj" in k or "pred" in k:
+                print(f"Removing key {k} from pretrained checkpoint")
+                del checkpoint_model[k]
+
+        if 'seco' in args.finetune:
+            # for the seco model, the pretrained weights has encoder_q and encoder_k, so we need to remove these keys from the pretrained weights
+            # and only choose the encoder_q weights. We then replace the term encoder_q with the corresponding terms in the
+            # resnet model
+            checkpoint_model_keys = list(checkpoint_model.keys())
+            for k in checkpoint_model_keys:
+                if 'encoder_k' in k or 'queue' in k or 'heads' in k:
+                    print(f"Removing key {k} from pretrained checkpoint")
+                    del checkpoint_model[k]
+            if 'unet' in args.model:
+                # rename encoder_q to encoder
+                encoder_keys = [k for k in model.state_dict().keys() if 'encoder' in k]
+                for k, v in zip(encoder_keys, list(checkpoint_model.keys())):
+                    new_v = k
+                    checkpoint_model[new_v] = checkpoint_model.pop(v)
+            else:
+                for k, v in zip(list(model.state_dict().keys())[:-2], list(checkpoint_model.keys())):
+                    new_v = k
+                    checkpoint_model[new_v] = checkpoint_model.pop(v)
+
+        elif 'gassl' in args.finetune:
+            checkpoint_model_state_dict = checkpoint_model['state_dict']
+            # first we remove module prefix from the keys
+            checkpoint_model_state_dict = {k.replace('module.', ''): v for k, v in checkpoint_model_state_dict.items()}
+            
+            checkpoint_model = checkpoint_model_state_dict.copy()
+            for k in checkpoint_model_state_dict:
+                if 'encoder_k' in k or 'queue' in k or 'heads' in k:
+                    print(f"Removing key {k} from pretrained checkpoint")
+                    del checkpoint_model[k]     
+            if 'unet' in args.model:
+                # rename encoder_q to encoder
+                checkpoint_model = {k.replace('encoder_q', 'encoder'): v for k, v in checkpoint_model.items()}
+            else:
+                for k, v in zip(list(model.state_dict().keys())[:-2], list(checkpoint_model.keys())):
+                    new_v = k
+                    checkpoint_model[new_v] = checkpoint_model.pop(v)
+        elif 'satlas' in args.finetune and 'unet' in args.model:
+            encoder_keys = [k for k in model.state_dict().keys() if 'encoder' in k]
+            for k, v in zip(encoder_keys, list(checkpoint_model.keys())):
+                new_v = k
+                checkpoint_model[new_v] = checkpoint_model.pop(v)
+
+        else:
+            checkpoint_model = remap_checkpoint_keys(checkpoint_model)
+        load_state_dict(model, checkpoint_model, prefix=args.model_prefix)
+
+
+
+        if 'convnextv2_unet' in args.model:
+            print("---unfreezing the decoder part of the model for unet---")
+            # we need to freeze the encoder part of the model
+            for param in model.parameters():
+                param.requires_grad = False
+            
+            model.head.weight.requires_grad = True
+            model.head.bias.requires_grad = True
+
+            # we also have a list of upsample layers with upsample blocks in the model
+            for layer in model.upsample_layers:
+                for param in layer.parameters():
+                    param.requires_grad = True
+            
+            for param in model.initial_conv_upsample.parameters():
+                param.requires_grad = True
+        elif 'resnet' in args.model and 'unet' in args.model:
+
+            print("---unfreezing the decoder part of the model for unet---")
+            # we need to freeze the encoder part of the model
+            for param in model.encoder.parameters():
+                param.requires_grad = False
+
+            model.decoder.requires_grad = True
+            model.segmentation_head.requires_grad = True
+
+
+        elif 'resnet' in args.model:
+            in_features = model.fc.in_features
+            model.fc = torch.nn.Identity()
+
+            # freeze the model
+            for param in model.parameters():
+                param.requires_grad = False
+
+            # add a new head
+            model.fc = torch.nn.Linear(in_features, args.nb_classes)
+            model.fc.weight.requires_grad = True
+            model.fc.bias.requires_grad = True
+
+            # manually initialize the new head like how its done in the fine-tuning part above
+            trunc_normal_(model.fc.weight, std=2e-5)
+            torch.nn.init.constant_(model.fc.bias, 0.)
+        else:
+            in_features = model.head.in_features
+            model.head = torch.nn.Identity()
+
+            # freeze the model
+            for param in model.parameters():
+                param.requires_grad = False
+
+            # add a new head
+            model.head = torch.nn.Linear(in_features, args.nb_classes)
+            model.head.weight.requires_grad = True
+            model.head.bias.requires_grad = True
+
+
+            # manually initialize the new head like how its done in the fine-tuning part above
+            trunc_normal_(model.head.weight, std=2e-5)
+            torch.nn.init.constant_(model.head.bias, 0.)
+
+    return model, checkpoint_model
+
