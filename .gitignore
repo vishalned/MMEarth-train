@@ -20,3 +20,4 @@ run_group_eval.py
 test_scores.zip
 latex_tables.py
 .pytest_cache/
+test_scores_tiny/
