@@ -7,6 +7,9 @@
 [![Paper](https://img.shields.io/badge/arXiv-2405.02771-blue)](https://arxiv.org/abs/2405.02771)
 [![Code - Data](https://img.shields.io/badge/Code%20--%20Data-darkgreen)](https://github.com/vishalned/MMEarth-data/tree/main)
 
+
+:bangbang:  **UPDATE: This repo is currently being fixed to work with the new v001 version of the data and with the ffcv dataloader. It will be ready by the first week of August 2024.** 
+
 This repository contains code used to create the models and results presented in this paper [MMEarth: Exploring Multi-Modal Pretext Tasks For Geospatial Representation Learning](https://arxiv.org/abs/2405.02771). It modifies the [ConvNext V2](https://arxiv.org/abs/2301.00808) architecture to be used with [MMEarth](https://github.com/vishalned/MMEarth-data), which is a multi-modal geospatial remote sensing data. 
 
 ![model-grey](https://github.com/vishalned/MMEarth-train/assets/27778126/d7defca4-f603-4f00-af7d-f18e4fb3be84)
