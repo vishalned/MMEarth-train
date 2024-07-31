@@ -12,6 +12,17 @@
 
 This repository contains code used to create the models and results presented in this paper [MMEarth: Exploring Multi-Modal Pretext Tasks For Geospatial Representation Learning](https://arxiv.org/abs/2405.02771). It modifies the [ConvNext V2](https://arxiv.org/abs/2301.00808) architecture to be used with [MMEarth](https://github.com/vishalned/MMEarth-data), which is a multi-modal geospatial remote sensing data. 
 
+## 📢 Latest Updates
+:fire::fire::fire: Last Updated on 2024.08.01 :fire::fire::fire:
+
+- **Paper accepted to ECCV 2024 !!**
+- Model now pretrained on MMEarth v001 & evaluated on GEO-Bench v1.0.
+- Updated model scripts to work with MMEarth-v001.
+- Data augmentation fix: Random crops are now aligned across modalities
+- Test metrics fix: Metrics are now overall instead of mini-batch averages, matching GEO-Bench metrics.
+- Added ffcv dataloader for both pretraining and finetuning. (training speed increased significantly.)
+
+
 ![model-grey](https://github.com/vishalned/MMEarth-train/assets/27778126/d7defca4-f603-4f00-af7d-f18e4fb3be84)
 
 ## Installation
