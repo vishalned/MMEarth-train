@@ -7,7 +7,7 @@ from pathlib import Path
 # we have the data for both l2a and l1c, so l2a has everything below except B10. l1c has everything except SCL and MSK_CLDPRB
 # sentinel2: B01, B02, B03, B04, B05, B06, B07, B08, B8A, B09, B10, B11, B12
 # sentinel2_cloudmask: QA60
-# sentinel2_cloudprob: MSK_CLDPRB
+# sentinel2_cloudprod: MSK_CLDPRB
 # sentinel2_scl: SCL
 # sentinel1: asc_VV, asc_VH, asc_HH, asc_HV, desc_VV, desc_VH, desc_HH, desc_HV
 # aster: elevation, slope
@@ -122,7 +122,7 @@ MODALITIES_FULL = {
         "B12",
     ],
     "sentinel2_cloudmask": ["QA60"],
-    "sentinel2_cloudprob": ["MSK_CLDPRB"],
+    "sentinel2_cloudprod": ["MSK_CLDPRB"],
     "sentinel2_scl": ["SCL"],
     "sentinel1": [
         "asc_VV",
