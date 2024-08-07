@@ -9,6 +9,7 @@ For all pre-training, we maintain an effective batch size of 4096. This is to en
 --loss_aggr # loss aggregation strategy to account for multiple losses for each modality. We have implemented the uncertainty method (as explained by Kendall et al.) or the unweighted method (equal weighting of all losses). 
 --random_crop # enables random cropping the image to a size of (input_size x input_size). This works well when the input_size is 112 or 58 (given that MMEarth data is of size 128 or 64). 
 --use_orig_stem # uses the original stem as in ConvNeXt V2, or a modified version of the stem. For our experiments we use the modified stem.
+--no_ffcv # a boolean variable that indicates if you want to use ffcv or not
 ```
 
 **Modalities:** All modalities required for training must be modified in the `MODALITIES.py` file. The comments in that file will provide some more instructions on what to change.
@@ -36,7 +37,8 @@ python  -m torch.distributed.launch --nproc_per_node=8 main_pretrain.py \
         --input_size 112 \
         --random_crop True \
         --use_orig_stem False \
-        --save_ckpt True
+        --save_ckpt True \
+        --no_ffcv True
 ```
 
 
@@ -47,8 +49,11 @@ python  -m torch.distributed.launch --nproc_per_node=8 main_pretrain.py \
 
 --use_orig_stem # uses the original stem as in ConvNeXt V2, or a modified version of the stem. For our experiments we use the modified stem.
 --patch_size # ensure this is the same as what was used for the pretrained model.
---num_samples # used when you want a smaller subsample of the training set. 
---input_size # ensure this is also the same as what was used for the pretrained model. NOTE: This is not the image size of the finetuning dataset.  
+--input_size # ensure this is also the same as what was used for the pretrained model. NOTE: This is not the image size of the finetuning dataset.
+--no_ffcv # a boolean variable that indicates if you want to use ffcv or not
+--run_on_test # a boolean variable that indicates if you want to report the metrics on the test set or not
+--geobench_bands_type # 'bgr' or 'full' or 'rgb'. this indicates if you want to use all the bands, bgr bands or rgb bands in the geobench dataset.
+--partition # ("0.01x_train" "0.05x_train" "0.50x_train", "default") what percentage subset of the geobench dataset to use.
 ```
 
 **Bands:** We have enabled finetuning on GEO-Bench datasets (bigearthnet, so2sat, eurosat, cashew-plantation, SA-crop-type, brick-kiln). The datasets are named like `m-bigearthnet` for example. Modify `BAND_NAMES.json`, to change the bands that need to be used for these datasets. You can either use 3 bands (RGB) or all 12 bands. (eg. In the case of so2sat, the dataset doesnt consist of 12 bands, hence we replace the missing bands with ones containing similar wavelength (B1 -> B2, B9 -> B8A)).
@@ -81,7 +86,11 @@ python -m  main_finetune \
             --input_size 112 \
             --use_orig_stem False \
             --save_ckpt False \
-            --num_samples None
+            --no_ffcv False \
+            --run_on_test True \
+            --num_workers 2 \
+            --geobench_bands_type 'bgr' \
+            --partition 'default' 
 ```
 
 **Note:** In the case of the segmentations datasets (cashew-plantation and SA-crop-type), you need to change the model and smoothing argument as follows:
