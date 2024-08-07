@@ -9,8 +9,10 @@
 import math
 import sys
 from typing import List, Dict, AnyStr
-
-import ffcv
+try:
+    import ffcv
+except:
+    print('engine_pretrain.py : not importing ffcv, since it is not installed')
 import torch
 
 import helpers
@@ -19,7 +21,7 @@ import helpers
 def train_one_epoch(
     model: torch.nn.Module,
     modalities: Dict[AnyStr,List],
-    data_loader: ffcv.Loader,
+    data_loader,
     optimizer: torch.optim.Optimizer,
     device: torch.device,
     epoch: int,
