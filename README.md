@@ -72,6 +72,24 @@ Note: The only exception is when using the model trained on imagenet, the folder
 ```
 
 
+A detailed overview of each checkpoint is shown in the table below.
+
+| **INPUT** | **OUTPUT** | **MODEL** | **DATASET** | **LOSS** | **MODEL_IMG_SIZE** | **PATCH_SIZE** | **CKPT** |
+| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| S2 12 band | all modalities | Atto | MMEarth64 | Uncertainty | 56x56 | 8x8 | [download](https://sid.erda.dk/cgi-sid/ls.py?share_id=g23YOnaaTp&current_dir=pt-all_mod_atto_1M_64_uncertainty_56-8&flags=f) |
+| S2 12 band | all modalities | Atto | MMEarth64 | Unweighted | 56x56 | 8x8 | [download](https://sid.erda.dk/cgi-sid/ls.py?share_id=g23YOnaaTp&current_dir=pt-all_mod_atto_1M_64_unweighted_56-8&flags=f) |
+| S2 12 band | all modalities | Atto | MMEarth | Uncertainty | 112x112 | 16x16 | [download](https://sid.erda.dk/cgi-sid/ls.py?share_id=g23YOnaaTp&current_dir=pt-all_mod_atto_1M_128_uncertainty_112-16&flags=f) |
+| S2 12 band | all modalities | Tiny | MMEarth64 | Uncertainty | 56x56 | 8x8 | [download](https://sid.erda.dk/cgi-sid/ls.py?share_id=g23YOnaaTp&current_dir=pt-all_mod_tiny_1M_64_uncertainty_56-8&flags=f) |
+| S2 12 band | all modalities | Atto | MMEarth100k | Uncertainty | 112x112 | 16x16 | [download](https://sid.erda.dk/cgi-sid/ls.py?share_id=g23YOnaaTp&current_dir=pt-all_mod_atto_100k_128_uncertainty_112-16&flags=f) |
+| S2 12 band | image level modalities | Atto | MMEarth64 | Uncertainty | 56x56 | 8x8 | [download](https://sid.erda.dk/cgi-sid/ls.py?share_id=g23YOnaaTp&current_dir=pt-img_mod_atto_1M_64_uncertainty_56-8&flags=f) |
+| S2 12 band | pixel level <br/> modalities | Atto | MMEarth64 | Uncertainty | 56x56 | 8x8 | [download]( https://sid.erda.dk/cgi-sid/ls.py?share_id=g23YOnaaTp&current_dir=pt-pix_mod_atto_1M_64_uncertainty_56-8&flags=f)|
+| S2 12 band | S2 12 band | Atto | MMEarth64 | Uncertainty | 56x56 | 8x8 | [download](https://sid.erda.dk/cgi-sid/ls.py?share_id=g23YOnaaTp&current_dir=pt-S2_atto_1M_64_uncertainty_56-8&flags=f) |
+| S2 bgr | S2 bgr | Atto | MMEarth64 | Uncertainty | 56x56 | 8x8 | [download](https://sid.erda.dk/cgi-sid/ls.py?share_id=g23YOnaaTp&current_dir=pt-rgb_atto_1M_64_uncertainty_56-8&flags=f) |
+| S2 bgr | S2 bgr | Atto | MMEarth | Uncertainty | 128x128 | 16x16 | [download](https://sid.erda.dk/cgi-sid/ls.py?share_id=g23YOnaaTp&current_dir=pt-rgb_atto_1M_128_uncertainty_112-16&flags=f) |
+
+
+
+
 
 ## Acknowledgment
 This repository borrows from the [ConvNeXt V2](https://github.com/facebookresearch/ConvNeXt-V2/tree/main) repository.
