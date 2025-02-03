@@ -7,6 +7,7 @@ from timm.models.layers import trunc_normal_, DropPath
 from torch import Tensor
 
 from .norm_layers import LayerNorm, GRN
+from .convnextv2_unet import ConvNeXtV2_unet
 
 
 # All rights reserved.
@@ -243,4 +244,43 @@ def convnextv2_large(**kwargs):
 
 def convnextv2_huge(**kwargs):
     model = ConvNeXtV2(depths=[3, 3, 27, 3], dims=[352, 704, 1408, 2816], **kwargs)
+    return model
+
+def convnextv2_unet_atto(**kwargs):
+    model = ConvNeXtV2_unet(depths=[2, 2, 6, 2], dims=[40, 80, 160, 320], **kwargs)
+    return model
+
+
+def convnextv2_unet_femto(**kwargs):
+    model = ConvNeXtV2_unet(depths=[2, 2, 6, 2], dims=[48, 96, 192, 384], **kwargs)
+    return model
+
+
+def convnextv2_unet_pico(**kwargs):
+    model = ConvNeXtV2_unet(depths=[2, 2, 6, 2], dims=[64, 128, 256, 512], **kwargs)
+    return model
+
+
+def convnextv2_unet_nano(**kwargs):
+    model = ConvNeXtV2_unet(depths=[2, 2, 8, 2], dims=[80, 160, 320, 640], **kwargs)
+    return model
+
+
+def convnextv2_unet_tiny(**kwargs):
+    model = ConvNeXtV2_unet(depths=[3, 3, 9, 3], dims=[96, 192, 384, 768], **kwargs)
+    return model
+
+
+def convnextv2_unet_base(**kwargs):
+    model = ConvNeXtV2_unet(depths=[3, 3, 27, 3], dims=[128, 256, 512, 1024], **kwargs)
+    return model
+
+
+def convnextv2_unet_large(**kwargs):
+    model = ConvNeXtV2_unet(depths=[3, 3, 27, 3], dims=[192, 384, 768, 1536], **kwargs)
+    return model
+
+
+def convnextv2_unet_huge(**kwargs):
+    model = ConvNeXtV2_unet(depths=[3, 3, 27, 3], dims=[352, 704, 1408, 2816], **kwargs)
     return model

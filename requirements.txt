@@ -1,5 +1,5 @@
 ninja
-timm
+timm==0.9.7
 wandb
 tensorboardX
 kornia

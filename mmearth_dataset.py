@@ -186,7 +186,7 @@ def get_mmearth_dataloaders(
     no_ffcv: bool = False,
     indices: list[list[int]] = None,
     distributed: bool = False,
-) -> list[Union[ffcv.Loader]]:
+):
     """
     Creates and returns data loaders for the MMEarth dataset. If the processed beton file does not exist, it processes the data
     and creates the beton file, then returns FFCV data loaders.

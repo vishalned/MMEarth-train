@@ -420,10 +420,19 @@ class FCMAE(nn.Module):
 
         # Apply the same transform to all images in the batch
         for modality in imgs_dict:
+            type_changed = False
             if modality in PIXEL_WISE_MODALITIES:
+                # the interpolate function in random_crop does not work for long dtype. hence for int64, we convert to float
+                if imgs_dict[modality].dtype == torch.int64:
+                    imgs_dict[modality] = imgs_dict[modality].float()
+                    type_changed = True
+                    
                 imgs_dict[modality] = self.random_crop.apply_transform(
                     imgs_dict[modality], params, None
                 )
+                if type_changed:
+                    imgs_dict[modality] = imgs_dict[modality].long() # convert back to long if the type was changed
+
 
         # here imgs_dict is a dictionary with every modality, we set imgs to be the input which in this case
         # is always sentinel2.

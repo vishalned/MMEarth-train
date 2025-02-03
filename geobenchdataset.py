@@ -31,6 +31,15 @@ GEOBENCH_TASK = {
     "m-SA-crop-type": "segmentation",
 }
 
+TASK_CLASS = {
+    "m-eurosat": "classification",
+    "m-so2sat": "classification",
+    "m-bigearthnet": "multi_label_classification",
+    "m-brick-kiln": "classification",
+    "m-cashew-plant": "segmentation",
+    "m-SA-crop-type": "segmentation",
+}
+
 
 def get_band_names(version="1.0", geobench_bands_type="full"):
     if version == "1.0":
@@ -169,7 +178,8 @@ def get_geobench_dataloaders(
     distributed: bool = False,
     version: str = "1.0",
     geobench_bands_type: str = "full",
-) -> Tuple[list[ffcv.Loader], TaskSpecifications]:
+    seed: int = 0,
+):
     """
     Creates and returns data loaders for the GeobenchDataset dataset. If the processed beton file does not exist,
     it processes the data and creates the beton file, then returns FFCV data loaders.
@@ -235,8 +245,8 @@ def get_geobench_dataloaders(
         "If indices are given, the number of splits and number of list of indices"
         "must align (len(indices) != len(splits) = ({len(indices)} != {len(splits))}"
     )
-
-    processed_dir.mkdir(exist_ok=True)
+    if processed_dir is not None:
+        processed_dir.mkdir(exist_ok=True)
 
     dataloaders = []
     task, _ = GeobenchDataset.get_task(dataset_name, version)
@@ -250,8 +260,10 @@ def get_geobench_dataloaders(
             assert len(get_band_names(version, geobench_bands_type)[dataset_name]) == 3
         elif geobench_bands_type == "full":
             assert len(get_band_names(version, geobench_bands_type)[dataset_name]) == 12
-
-        beton_file = processed_dir / f"{split}_{dataset_name}_{partition}{subset}{bands_type}.beton"
+        if processed_dir is None:
+            beton_file = Path('./random.beton')
+        else:
+            beton_file = processed_dir / f"{split}_{dataset_name}_{partition}{subset}{bands_type}.beton"
 
         if not beton_file.exists() or no_ffcv:
             if not beton_file.exists():
@@ -350,8 +362,16 @@ def get_geobench_dataloaders(
         )
 
         dataloaders.append(dataloader)
-
-    return dataloaders, task
+    task_dict = {
+        "class_names": task.label_type.class_names if TASK_CLASS[dataset_name] != "multi_label_classification" else None,
+        "num_classes": task.label_type.n_classes,
+        "type": GEOBENCH_TASK[dataset_name],
+        "dataset": dataset_name,
+        "label_type": TASK_CLASS[dataset_name],
+    }
+    task_dict = type("TaskDict", (object,), task_dict)()
+    
+    return dataloaders, task_dict
 
 
 def convert_geobench_to_beton(

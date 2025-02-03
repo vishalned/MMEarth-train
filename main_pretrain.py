@@ -184,17 +184,13 @@ def main(args):
         print("Logging to wandb")
         config = {
             "model": args.model,
-            "mask_ratio": args.mask_ratio,
-            "norm_pix_loss": args.norm_pix_loss,
-            # "loss_type": args.loss_type,
             "loss_aggr": args.loss_aggr,
-            "loss_full": args.loss_full,
             "patch_size": args.patch_size,
-            "input_size": args.input_size,
             "blr": args.blr,
+            "lr": args.lr,
             "batch_size": args.batch_size,
             "update_freq": args.update_freq,
-            "use_orig_stem": args.use_orig_stem,
+            "epochs": args.epochs,
         }
 
         wandb.init(project=args.wandb_project, config=config)

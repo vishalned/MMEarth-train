@@ -28,16 +28,33 @@ import helpers
 import models.convnextv2 as convnextv2
 import models.convnextv2_unet as convnextv2_unet
 from custom_loss import LabelSmoothingBinaryCrossEntropy
-from datasets import build_dataset
+# from datasets import build_dataset
 from engine_finetune import train_one_epoch, evaluate
 from geobenchdataset import get_geobench_dataloaders
-from geobench.dataset import SegmentationClasses
-from geobench.label import Classification, MultiLabelClassification
 from helpers import NativeScalerWithGradNormCount as NativeScaler
 from helpers import str2bool, remap_checkpoint_keys, load_custom_checkpoint
 from optim_factory import create_optimizer, LayerDecayValueAssigner
 
+GEO_BENCH_DATASETS = ['m-eurosat', 'm-so2sat', 'm-bigearthnet', 'm-brick-kiln', 'm-cashew-plant', 'm-SA-crop-type']
 
+def criterion_fn(args):
+    '''
+    Returns the criterion function based on the dataset
+
+
+    TODO: Add more criterion functions for different datasets
+    '''
+
+    criterion_dict = {
+        "m-eurosat": LabelSmoothingCrossEntropy(args.smoothing),
+        "m-so2sat": LabelSmoothingCrossEntropy(args.smoothing),
+        "m-bigearthnet": LabelSmoothingBinaryCrossEntropy(args.smoothing),
+        "m-brick-kiln": LabelSmoothingCrossEntropy(args.smoothing),
+        "m-cashew-plant": torch.nn.CrossEntropyLoss(),
+        "m-SA-crop-type": torch.nn.CrossEntropyLoss(),
+    }[args.data_set]
+
+    return criterion_dict
 
 def get_args_parser():
     parser = argparse.ArgumentParser("FCMAE fine-tuning", add_help=False)
@@ -338,7 +355,7 @@ def get_args_parser():
     parser.add_argument(
         "--eval", type=str2bool, default=False, help="Perform evaluation only"
     )
-    parser.add_argument("--num_workers", default=4, type=int)
+    parser.add_argument("--num_workers", default=1, type=int)
     parser.add_argument(
         "--pin_mem",
         type=str2bool,
@@ -400,87 +417,64 @@ def get_args_parser():
     )
     parser.add_argument("--test_scores_dir", type=str, default="./test_scores/")
     parser.add_argument("--debug", type=str2bool, default=False)
-    parser.add_argument("--version", type=str, default="0.9.1")
+    parser.add_argument("--version", type=str, default="1.0")
     parser.add_argument("--nb_classes", default=10, type=int)
     parser.add_argument("--no_ffcv", type=str2bool, default=False)
+    parser.add_argument("--distributed", type=str2bool, default=False)
     return parser
 
 
 def main(args: argparse.Namespace):
     # utils.init_distributed_mode(args)
-    args.distributed = False  # we just disable distributed training for now, enable it by commenting this line, and uncommenting the line above
+    if args.distributed:
+        helpers.init_distributed_mode(args)
 
     print(args)
     device = torch.device(args.device)
+
+    if '.pth' not in args.finetune and '.pt' not in args.finetune:
+        # it is a directory, so we get the last checkpoint
+        args.finetune = os.path.join(args.finetune, sorted(os.listdir(args.finetune))[-1])
 
     # fix the seed for reproducibility
     seed = args.seed + helpers.get_rank()
     torch.manual_seed(seed)
     np.random.seed(seed)
     cudnn.benchmark = True
+    log_writer = None
 
     processed_dir = args.processed_dir
-    if processed_dir is None:
-        processed_dir = GEO_BENCH_DIR
-    (train_dataloader, val_dataloader), task = get_geobench_dataloaders(
-        args.data_set,
-        processed_dir,
-        args.num_workers,
-        args.batch_size,
-        ["train", "val"],
-        args.partition,
-        indices=[list(range(10)), list(range(10))] if args.debug else None,
-        version=args.version,
-        geobench_bands_type=args.geobench_bands_type,
-        no_ffcv=args.no_ffcv,
-    )
-    num_classes = task.label_type.n_classes
-    # in_channels = len(task.band_stats) - 1 # without label
+    if args.data_set in GEO_BENCH_DATASETS:
+        if processed_dir is None:
+            processed_dir = GEO_BENCH_DIR
+        (train_dataloader, val_dataloader), task = get_geobench_dataloaders(
+            args.data_set,
+            processed_dir,
+            args.num_workers,
+            args.batch_size,
+            ["train", "val"],
+            args.partition,
+            indices=[list(range(10)), list(range(10))] if args.debug else None,
+            version=args.version,
+            geobench_bands_type=args.geobench_bands_type,
+            no_ffcv=args.no_ffcv,
+            seed=args.seed,
+        )
+    else:
+        # call a new dataset function here
+        raise ValueError(f"Unknown dataset: {args.data_set}") 
+    
+    
+    num_classes = task.num_classes
     samples, targets, _, _ = next(iter(train_dataloader))
     in_channels = samples.shape[1]
     print('in_channels:', in_channels)
     print('num_classes:', num_classes)
     args.nb_classes = num_classes
-    num_tasks = helpers.get_world_size()
-    global_rank = helpers.get_rank()
 
-
-    if global_rank == 0 and args.log_dir is not None:
-        os.makedirs(args.log_dir, exist_ok=True)
-        log_writer = helpers.TensorboardLogger(log_dir=args.log_dir)
-    else:
-        log_writer = None
-
-    mixup_fn = None
-    # default code provided by ConvNeXt authors. This is not used in MMEarth experiments.
-    mixup_active = args.mixup > 0 or args.cutmix > 0.0 or args.cutmix_minmax is not None
-    if mixup_active:
-        print("Mixup is activated!")
-        mixup_fn = Mixup(
-            mixup_alpha=args.mixup,
-            cutmix_alpha=args.cutmix,
-            cutmix_minmax=args.cutmix_minmax,
-            prob=args.mixup_prob,
-            switch_prob=args.mixup_switch_prob,
-            mode=args.mixup_mode,
-            label_smoothing=args.smoothing,
-            num_classes=num_classes,
-        )
-
-    ############################## LOADING MODEL AND FREEZING/UNFREEING MODEL #############################
-
-    if "convnextv2_unet" in args.model:
-        model = convnextv2_unet.__dict__[args.model](
-            num_classes=num_classes,
-            drop_path_rate=args.drop_path,
-            head_init_scale=args.head_init_scale,
-            args=args,
-            patch_size=args.patch_size,
-            img_size=args.input_size,
-            use_orig_stem=args.use_orig_stem,
-            in_chans=in_channels,
-        )
-    elif 'resnet' in args.model:
+ ############################## LOADING MODEL AND FREEZING/UNFREEING MODEL #############################
+    # resnet is used for other benchmarking models. For MMEarth, we use convnextv2 models
+    if 'resnet' in args.model:
         if 'unet' in args.model:
             import segmentation_models_pytorch as smp
             model_name = 'resnet18' if '18' in args.model else 'resnet50'
@@ -491,51 +485,38 @@ def main(args: argparse.Namespace):
                 classes=args.nb_classes
             )
         else:
-        # resnet 18 or 50
             model = torchvision.models.__dict__[args.model](pretrained=False)
     else:
+        # convnextv2 unet models are also loaded here
         model = convnextv2.__dict__[args.model](
-            num_classes=num_classes,
-            drop_path_rate=args.drop_path,
-            head_init_scale=args.head_init_scale,
-            args=args,
-            patch_size=args.patch_size,
-            img_size=args.input_size,
-            use_orig_stem=args.use_orig_stem,
-            in_chans=in_channels,
-        )
+                num_classes=num_classes,
+                drop_path_rate=args.drop_path,
+                head_init_scale=args.head_init_scale,
+                args=args,
+                patch_size=args.patch_size,
+                img_size=args.input_size,
+                use_orig_stem=args.use_orig_stem,
+                in_chans=in_channels,
+            )
 
-    model,checkpoint_model = load_custom_checkpoint(model, args) # freezing and unfreezing is done in this function
-    
+    model, _ = load_custom_checkpoint(model, args) # freezing and unfreezing is done in this function
     model.to(device)
-    ####################################################################################################
 
-
-
-    model_ema = None
-    if args.model_ema:
-        # Important to create EMA model after cuda(), DP wrapper, and AMP but before SyncBN and DDP wrapper
-        model_ema = ModelEma(
-            model,
-            decay=args.model_ema_decay,
-            device="cpu" if args.model_ema_force_cpu else "",
-            resume="",
-        )
-        print("Using EMA with decay = %.8f" % args.model_ema_decay)
 
     model_without_ddp = model
     if 'resnet50' in args.model:
         model_without_ddp.depths = [3, 4, 6, 3]
     elif 'resnet18' in args.model:
         model_without_ddp.depths = [2, 2, 2, 2]
-    n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
 
+
+    ####################################################################################################
+
+    n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print("Model = %s" % str(model_without_ddp))
     print("number of params:", n_parameters)
-
     eff_batch_size = args.batch_size * args.update_freq * helpers.get_world_size()
     num_training_steps_per_epoch = len(train_dataloader) // eff_batch_size
-
     if args.lr is None:
         args.lr = args.blr * eff_batch_size / 256
 
@@ -570,6 +551,9 @@ def main(args: argparse.Namespace):
         )
         model_without_ddp = model.module
 
+
+
+    ############################## OPTIMIZER and LOSS SCALER #####################
     optimizer = create_optimizer(
         args,
         model_without_ddp,
@@ -578,56 +562,18 @@ def main(args: argparse.Namespace):
         get_layer_scale=assigner.get_scale if assigner is not None else None,
     )
     loss_scaler = NativeScaler(args.device)
-
+    ##############################################################################
 
 
 
 
     ############################## LOSS FUNCTION #############################
-    if mixup_fn is not None:
-        # smoothing is handled with mixup label transform
-        criterion = SoftTargetCrossEntropy()
-    elif args.smoothing > 0.0:
-        criterion = LabelSmoothingCrossEntropy(smoothing=args.smoothing)
-    else:
-        # for segmentations problems we ensure that smoothing is not applied
-        criterion = torch.nn.CrossEntropyLoss()
-
-    if task.label_type.__class__ == MultiLabelClassification:
-        criterion = LabelSmoothingBinaryCrossEntropy(smoothing=args.smoothing)
-    print("criterion = %s" % str(criterion))
+    criterion = criterion_fn(args)
+    print("Criterion = %s" % str(criterion))
     ##########################################################################
 
 
 
-
-
-    ###### TMP FIX FOR SEGMENTATION DATASET WHEN ONLY RUNNING ON TEST ######
-    # if task.label_type.__class__ == SegmentationClasses:
-    #     if "resnet" in args.model:
-    #         print("resnet: unfreezing the encoder part of the model")
-    #         for param in model.encoder.parameters():
-    #             param.requires_grad = True
-    #         optimizer.add_param_group({"params": model.encoder.parameters()})
-        # else:
-        #     print("Unfreezing the encoder part of the model")
-        #     for param in model.parameters():
-        #         param.requires_grad = True
-
-        #     optimizer.add_param_group(
-        #         {"params": model.downsample_layers.parameters()}
-        #     )
-        #     optimizer.add_param_group({"params": model.stages.parameters()})
-        #     if args.use_orig_stem:
-        #         optimizer.add_param_group(
-        #             {"params": model.stem_orig.parameters()}
-        #         )
-        #     else:
-        #         optimizer.add_param_group(
-        #             {"params": model.initial_conv.parameters()}
-        #         )
-        #         optimizer.add_param_group({"params": model.stem.parameters()})
-    ##############################################################################
     
 
     helpers.auto_load_model(
@@ -636,7 +582,7 @@ def main(args: argparse.Namespace):
         model_without_ddp=model_without_ddp,
         optimizer=optimizer,
         loss_scaler=loss_scaler,
-        model_ema=model_ema,
+        model_ema=None,
     )
         
 
@@ -644,41 +590,33 @@ def main(args: argparse.Namespace):
     ############################## MAIN TRAINING LOOP #############################
 
     max_accuracy = 0.0
-    if args.model_ema and args.model_ema_eval:
-        max_accuracy_ema = 0.0
-
     print("Start training for %d epochs" % args.epochs)
     start_time = time.time()
+
     for epoch in range(args.start_epoch, args.epochs):
-        if log_writer is not None:
-            log_writer.set_step(epoch * num_training_steps_per_epoch * args.update_freq)
-        if "unet" in args.model:
+        if "segmentation" in task.label_type:
             # for unet we probe the decoder only for 50 epochs, and then fine-tune for 150 epochs
             if epoch == 50:
                 if "resnet" in args.model:
                     print("unfreezing the encoder part of the model")
-                    for param in model.encoder.parameters():
+                    for param in model_without_ddp.encoder.parameters():
                         param.requires_grad = True
-                    optimizer.add_param_group({"params": model.encoder.parameters()})
+
+                    optimizer.add_param_group({"params": model_without_ddp.encoder.parameters()})
                 else:
                     print("Unfreezing the encoder part of the model")
-                    for param in model.parameters():
+                    for param in model_without_ddp.parameters():
                         param.requires_grad = True
 
-                    optimizer.add_param_group(
-                        {"params": model.downsample_layers.parameters()}
-                    )
-                    optimizer.add_param_group({"params": model.stages.parameters()})
-                    if args.use_orig_stem:
-                        optimizer.add_param_group(
-                            {"params": model.stem_orig.parameters()}
-                        )
-                    else:
-                        optimizer.add_param_group(
-                            {"params": model.initial_conv.parameters()}
-                        )
-                        optimizer.add_param_group({"params": model.stem.parameters()})
+                    new_param_groups = [
+                        {"params": model_without_ddp.downsample_layers.parameters()},
+                        {"params": model_without_ddp.stages.parameters()},
+                        {"params": model_without_ddp.initial_conv.parameters()},
+                        {"params": model_without_ddp.stem.parameters()}
+                    ]
 
+                    optimizer.add_param_group({"params": [p for group in new_param_groups for p in group["params"]]})
+        
         train_stats = train_one_epoch(
             model,
             criterion,
@@ -688,12 +626,13 @@ def main(args: argparse.Namespace):
             epoch,
             loss_scaler,
             args.clip_grad,
-            model_ema,
-            mixup_fn,
+            None, #model_ema
+            None, #mixup
             log_writer=log_writer,
             args=args,
             task=task,
         )
+    
         if args.output_dir and args.save_ckpt:
             if (epoch + 1) % args.save_ckpt_freq == 0 or epoch + 1 == args.epochs:
                 helpers.save_model(
@@ -703,12 +642,16 @@ def main(args: argparse.Namespace):
                     optimizer=optimizer,
                     loss_scaler=loss_scaler,
                     epoch=epoch,
-                    model_ema=model_ema,
+                    model_ema=None,
                 )
         
         # validation        
         if val_dataloader is not None:
-            val_samples = val_dataloader.reader.num_samples
+            try:
+                val_samples = val_dataloader.reader.num_samples
+            except:
+                val_samples = len(val_dataloader.dataset)
+
             test_stats = evaluate(
                 val_dataloader, model, device, use_amp=args.use_amp, args=args, task=task
             )
@@ -730,7 +673,7 @@ def main(args: argparse.Namespace):
                         optimizer=optimizer,
                         loss_scaler=loss_scaler,
                         epoch="best",
-                        model_ema=model_ema,
+                        model_ema=None,
                     )
                 print(f"Max accuracy: {max_accuracy:.2f}%")
 
@@ -746,34 +689,6 @@ def main(args: argparse.Namespace):
             if args.wandb:
                 wandb.log(log_stats)
 
-            # repeat testing routines for EMA, if ema eval is turned on
-            if args.model_ema and args.model_ema_eval:
-                test_stats_ema = evaluate(
-                    val_dataloader, model_ema.ema, device, use_amp=args.use_amp
-                )
-                print(
-                    f"Accuracy of the model EMA on {val_dataloader.reader.num_samples} test images: {test_stats_ema['acc1']:.1f}%"
-                )
-                if max_accuracy_ema < test_stats_ema["acc1"]:
-                    max_accuracy_ema = test_stats_ema["acc1"]
-                    if args.output_dir and args.save_ckpt:
-                        helpers.save_model(
-                            args=args,
-                            model=model,
-                            model_without_ddp=model_without_ddp,
-                            optimizer=optimizer,
-                            loss_scaler=loss_scaler,
-                            epoch="best-ema",
-                            model_ema=model_ema,
-                        )
-                    print(f"Max EMA accuracy: {max_accuracy_ema:.2f}%")
-                if log_writer is not None:
-                    log_writer.update(
-                        test_acc1_ema=test_stats_ema["acc1"], head="perf", step=epoch
-                    )
-                log_stats.update(
-                    {**{f"test_{k}_ema": v for k, v in test_stats_ema.items()}}
-                )
         else:
             log_stats = {
                 **{f"train_{k}": v for k, v in train_stats.items()},
@@ -782,8 +697,6 @@ def main(args: argparse.Namespace):
             }
 
         if args.output_dir and helpers.is_main_process():
-            if log_writer is not None:
-                log_writer.flush()
             with open(
                 os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8"
             ) as f:
@@ -797,7 +710,11 @@ def main(args: argparse.Namespace):
     ################################ RUN ON TEST SET ################################
     if args.run_on_test:
         # use the last model
-        if task.label_type.__class__ != SegmentationClasses:
+        if args.distributed:
+            args.local_rank = 0
+            args.distributed = False
+        
+        if "segmentation" not in task.label_type:
             ckpt_file = 'checkpoint-99.pth'
         else:
             ckpt_file = 'checkpoint-199.pth'
@@ -813,20 +730,22 @@ def main(args: argparse.Namespace):
         # load the model directly with the checkpoint
         helpers.load_state_dict(model, checkpoint["model"], prefix=args.model_prefix)
         model.to(device)
-
-        (test_loader,), task = get_geobench_dataloaders(
-            args.data_set,
-            processed_dir,
-            args.num_workers,
-            args.batch_size,
-            ["test"],
-            args.partition,
-            indices=[list(range(10))] if args.debug else None,
-            version=args.version,
-            geobench_bands_type=args.geobench_bands_type,
-            no_ffcv=args.no_ffcv,
-            
-        )
+        if args.data_set in GEO_BENCH_DATASETS:
+            (test_loader,), task = get_geobench_dataloaders(
+                args.data_set,
+                processed_dir,
+                args.num_workers,
+                1, # batch size
+                ["test"],
+                args.partition,
+                indices=[list(range(10))] if args.debug else None,
+                version=args.version,
+                geobench_bands_type=args.geobench_bands_type,
+                no_ffcv=args.no_ffcv,
+                
+            )
+        else:
+            raise ValueError(f"Unknown dataset: {args.data_set}")
 
         print('test_loader data shape:', next(iter(test_loader))[0].shape)
 
@@ -838,27 +757,27 @@ def main(args: argparse.Namespace):
         print(f"Final test set - {test_samples} samples, score: {test_stats[key]:.3f}")
         test_score = test_stats[key]
         
+        ## some code for logging in a text file
+        # if helpers.is_main_process():
+        #     if (
+        #         task.label_type.__class__ == SegmentationClasses
+        #     ):
+        #         file_str = f"unet_lp&ft--{args.data_set}--{args.pretraining}.txt"
+        #     else:
+        #         if args.partition in ["default", "1.00x_train"]:
+        #             file_str = f"{'lp' if args.linear_probe else 'ft'}--{args.data_set}--{args.pretraining}.txt"
+        #         else:
+        #             text = args.partition
+        #             file_str = f"{'lp' if args.linear_probe else 'ft'}--{args.data_set}--{args.pretraining}--{text}.txt"
 
-        if helpers.is_main_process():
-            if (
-                task.label_type.__class__ == SegmentationClasses
-            ):
-                file_str = f"unet_lp&ft--{args.data_set}--{args.pretraining}.txt"
-            else:
-                if args.partition in ["default", "1.00x_train"]:
-                    file_str = f"{'lp' if args.linear_probe else 'ft'}--{args.data_set}--{args.pretraining}.txt"
-                else:
-                    text = args.partition
-                    file_str = f"{'lp' if args.linear_probe else 'ft'}--{args.data_set}--{args.pretraining}--{text}.txt"
+        #     if not os.path.exists(args.test_scores_dir):
+        #         os.makedirs(args.test_scores_dir, exist_ok=True)
 
-            if not os.path.exists(args.test_scores_dir):
-                os.makedirs(args.test_scores_dir, exist_ok=True)
-
-            with open(
-                os.path.join(args.test_scores_dir, file_str), mode="a", encoding="utf-8"
-            ) as f:
-                write_str = f"test score: {test_score}, val_score: {max_accuracy}\n"
-                f.write(write_str)
+        #     with open(
+        #         os.path.join(args.test_scores_dir, file_str), mode="a", encoding="utf-8"
+        #     ) as f:
+        #         write_str = f"test score: {test_score}, val_score: {max_accuracy}\n"
+        #         f.write(write_str)
 
     wandb.finish()
 

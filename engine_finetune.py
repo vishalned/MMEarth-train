@@ -8,7 +8,11 @@
 
 import math
 
-import ffcv
+try:
+    import ffcv
+except:
+    print("ffcv not installed")
+
 import torch
 from timm.data import Mixup
 from timm.loss import LabelSmoothingCrossEntropy
@@ -22,28 +26,29 @@ from typing import Callable, Dict, List, Optional, Union
 import helpers
 from helpers import adjust_learning_rate
 
-def eval_metrics_generator(task_specs: TaskSpecifications) -> List[torchmetrics.MetricCollection]:
+def eval_metrics_generator(task_specs) -> List[torchmetrics.MetricCollection]:
     """Return the appropriate eval function depending on the task_specs.
 
     Args:
-        task_specs: a GeoBench object describing the task to be performed
+        task_specs: a dictionary containing the task specifications
 
     Returns:
         metric collection used during evaluation
     """
-    metrics: List[torchmetrics.MetricCollection] = {  
-        Classification: torchmetrics.MetricCollection(
-            {"Accuracy": torchmetrics.Accuracy(task="multiclass", num_classes=task_specs.label_type.n_classes, average="micro")}
-        ),
-        SegmentationClasses: torchmetrics.MetricCollection(
-            {
-                "Jaccard": torchmetrics.JaccardIndex(task="multiclass", num_classes=task_specs.label_type.n_classes, average="macro"),
-            }
-        ),
-        MultiLabelClassification: torchmetrics.MetricCollection(
-            {"F1Score": torchmetrics.F1Score(task="multilabel", num_labels=task_specs.label_type.n_classes, average="micro")}
-        ),
-    }[task_specs.label_type.__class__]
+
+    if task_specs.num_classes == 1:
+        metrics: List[torchmetrics.MetricCollection] = {
+            "agbd": torchmetrics.MetricCollection({"MSE": helpers.CustomMSE()}),
+        }[task_specs.dataset]
+    else:
+        metrics: List[torchmetrics.MetricCollection] = {
+            "m-eurosat": torchmetrics.MetricCollection({"Accuracy": torchmetrics.Accuracy(task="multiclass", num_classes=task_specs.num_classes, average="micro")}),
+            "m-cashew-plant": torchmetrics.MetricCollection({"Jaccard": torchmetrics.JaccardIndex(task="multiclass", num_classes=task_specs.num_classes, average="macro")}),
+            "m-SA-crop-type": torchmetrics.MetricCollection({"Jaccard": torchmetrics.JaccardIndex(task="multiclass", num_classes=task_specs.num_classes, average="macro")}),
+            "m-bigearthnet": torchmetrics.MetricCollection({"F1Score": torchmetrics.F1Score(task="multilabel", num_labels=task_specs.num_classes, average="micro")}),
+            "m-so2sat": torchmetrics.MetricCollection({"Accuracy": torchmetrics.Accuracy(task="multiclass", num_classes=task_specs.num_classes, average="micro")}),
+            "m-brick-kiln": torchmetrics.MetricCollection({"Accuracy": torchmetrics.Accuracy(task="multiclass", num_classes=task_specs.num_classes, average="micro")}),
+    }[task_specs.dataset]
 
     return metrics
 
@@ -92,25 +97,21 @@ def train_one_epoch(
         samples = samples.to(device, non_blocking=True)
         targets = targets.to(device, non_blocking=True)
 
-        if mixup_fn is not None:
-            samples, targets = mixup_fn(samples, targets)
-
         with torch.cuda.amp.autocast(
             enabled=use_amp
         ):
             output = model(samples)
-            if (
-                task.label_type.__class__ == SegmentationClasses
-            ):
+            if task.label_type == "segmentation":
                 # make output class the last dimension
                 output = output.permute(0, 2, 3, 1)
                 # assuming for segmentation we have the cross entropy loss, we need to convert the output to something of shape N, C
                 output_tmp = output.contiguous().view(-1, output.size(3))
+                targets = targets.unsqueeze(1) if args.no_ffcv else targets
+
                 target_tmp = targets.permute(0, 2, 3, 1)
                 target_tmp = target_tmp.contiguous().view(-1, target_tmp.size(3))
                 target_tmp = target_tmp.squeeze(1) # cross entropy loss expects a 1D tensor
                 target_tmp = target_tmp.long()
-
             else:
                 target_tmp = targets
                 output_tmp = output
@@ -154,9 +155,7 @@ def train_one_epoch(
         if device.__str__ == "cuda":
             torch.cuda.synchronize()
 
-        if (
-            task.label_type.__class__ == SegmentationClasses
-        ):
+        if task.label_type == "segmentation":
             # for segmentation we calculate the mean intersection over union, hence the jaccard index
             output = output.permute(0, 3, 1, 2) # N, C, H, W
             output = torch.nn.functional.softmax(output, dim=1) # argmax already applied in the metric
@@ -205,10 +204,10 @@ def train_one_epoch(
 def evaluate(data_loader, model, device, use_amp=False, args=None, task=None):
     data_set = args.data_set
     # for bigearthnet, we use BCE loss
-    if task.label_type.__class__ == MultiLabelClassification:
+    if task.label_type == "multi_label_classification":
         criterion = torch.nn.BCEWithLogitsLoss()
     elif (
-        task.label_type.__class__ == SegmentationClasses
+        task.label_type == "segmentation"
     ):
         criterion = torch.nn.CrossEntropyLoss()
     else:
@@ -243,10 +242,8 @@ def evaluate(data_loader, model, device, use_amp=False, args=None, task=None):
             if isinstance(output, dict):
                 output = output["logits"]
 
-            if (
-                task.label_type.__class__ == SegmentationClasses
-            ):
-                output = output.permute(0, 2, 3, 1)
+            if task.label_type == "segmentation":
+                output = output.permute(0, 2, 3, 1) # N, H, W, C
 
                 output_tmp = output.contiguous().view(-1, output.size(3))
                 target_tmp = target.unsqueeze(3)
@@ -254,7 +251,7 @@ def evaluate(data_loader, model, device, use_amp=False, args=None, task=None):
                 target_tmp = target_tmp.squeeze(1)
                 target_tmp = target_tmp.long()
             else:
-                if task.label_type.__class__ == MultiLabelClassification:
+                if task.label_type == "multi_label_classification":
                     target_tmp = target.float()
                     output_tmp = output
                 else:
@@ -268,8 +265,7 @@ def evaluate(data_loader, model, device, use_amp=False, args=None, task=None):
 
     
         if (
-            data_set == "m-cashew-plant"
-            or data_set == "m-SA-crop-type"
+            task.label_type == "segmentation"
         ):
             output = output.permute(0, 3, 1, 2)
             output = torch.nn.functional.softmax(output, dim=1) # argmax already applied in the metric

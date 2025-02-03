@@ -75,3 +75,5 @@ python -m main_finetune \
     --version 1.0 \
     --num_workers 2 \
 
+
+# /lustre/scratch/WUR/AIN/nedun001/MMEarth-train-SSPT/pre_trained_ckpts/s2_only_atto/checkpoint-199.pth
