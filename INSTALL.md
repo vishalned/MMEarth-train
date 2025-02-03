@@ -17,6 +17,9 @@ pip install torch==2.3.1 torchvision==0.18.1 torchaudio==2.3.1 --index-url https
 pip install -r requirements.txt
 ```
 
+**Possible errors:** If you notice any errors regarding libnccl.so.2 when importing torch, a solution that might work is described [here](https://stackoverflow.com/questions/75879951/torch-2-installed-could-not-load-library-libcudnn-cnn-infer-so-8-error-libnv
+). TLDR: you need to update the LD_LIBRARY_PATH environment variable to the correct cuda libnccl.so.2 path.
+
 Install Minkoswki Engine (this is only required for pre-training the model from scratch, since ConvNeXt V2 uses sparse convolutions, which are implemented in the Minkowski Engine):
 
 We use GCC 11.X for the installation.
@@ -30,7 +33,7 @@ cd MinkowskiEngine
 python setup.py install --blas_include_dirs=${CONDA_PREFIX}/include --blas=openblas
 ```
 
-Possible errors: Incase you get errors referencing the `at:Tensor` variable in `src/spmm.cu` file. Consider adding `#include <ATen/core/Tensor.h>` to the same file and re run the setup.
+**Possible errors:** Incase you get errors referencing the `at:Tensor` variable in `src/spmm.cu` file. Consider adding `#include <ATen/core/Tensor.h>` to the same file and re run the setup. Make sure the added line is above `#include <ATen/cuda/CUDAContext.h>`.
 
 If you want to run the code using ffcv, you also need to install this:
 
@@ -39,7 +42,7 @@ conda config --env --set channel_priority flexible
 conda install cupy pkg-config compilers libjpeg-turbo opencv numba -c conda-forge
 pip install ffcv
 ```
-
+**Possible errors:** If you see an error with ffcv installations, first uninstall ffcv and reinstall using `pip install ffcv --no-cache-dir`.
 
 
 ## MP-MAE Finetuning
