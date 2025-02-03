@@ -12,10 +12,12 @@
 This repository contains code used to create the models and results presented in this paper [MMEarth: Exploring Multi-Modal Pretext Tasks For Geospatial Representation Learning](https://arxiv.org/abs/2405.02771). It modifies the [ConvNext V2](https://arxiv.org/abs/2301.00808) architecture to be used with [MMEarth](https://github.com/vishalned/MMEarth-data), which is a multi-modal geospatial remote sensing data. 
 
 ## 📢 Latest Updates
-:fire::fire::fire: Last Updated on 2024.08.07 :fire::fire::fire:
+:fire::fire::fire: Last Updated on 2025.02.03 :fire::fire::fire:
 
-- **Paper accepted to ECCV 2024 !!**
+- Added NEW_DATASET readme for instruction on adding new datasets
+- Updated repository to allow for various datasets during finetuning.
 - Updated installation scripts and repository.
+- **Paper accepted to ECCV 2024 !!**
 - Model now pretrained on MMEarth v001 & evaluated on GEO-Bench v1.0.
 - Updated model scripts to work with MMEarth-v001.
 - Data augmentation fix: Random crops are now aligned across modalities
@@ -31,6 +33,9 @@ See [INSTALL.md](https://github.com/vishalned/MMEarth-train/blob/main/INSTALL.md
 
 ## Training 
 See [TRAINING.md](https://github.com/vishalned/MMEarth-train/blob/main/TRAINING.md) for more details on training and finetuning. 
+
+## Adding New custom dataset
+See [NEW_DATASET.md](https://github.com/vishalned/MMEarth-train/blob/main/NEW_DATASET.md) for more details on finetuning on custom datasets.
 
 ## Model Checkpoints
 All the pretraining weights can be downloaded from [here](https://sid.erda.dk/sharelink/g23YOnaaTp). The folders are named in the format shown below. Inside the folder you will find a checkpoint `.pth` weight file. An example to load the weights is in the [examples](https://github.com/vishalned/MMEarth-train/tree/main/examples) folder.
