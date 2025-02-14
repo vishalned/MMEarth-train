@@ -34,7 +34,7 @@ See [INSTALL.md](https://github.com/vishalned/MMEarth-train/blob/main/INSTALL.md
 ## Training 
 See [TRAINING.md](https://github.com/vishalned/MMEarth-train/blob/main/TRAINING.md) for more details on training and finetuning. 
 
-## Adding New custom dataset
+## Evaluating on new custom datasets
 See [NEW_DATASET.md](https://github.com/vishalned/MMEarth-train/blob/main/NEW_DATASET.md) for more details on finetuning on custom datasets.
 
 ## Model Checkpoints
