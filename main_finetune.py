@@ -81,7 +81,7 @@ def get_args_parser():
     parser.add_argument(
         "--drop_path",
         type=float,
-        default=0.0,
+        default=0.1,
         metavar="PCT",
         help="Drop path rate (default: 0.1)",
     )
