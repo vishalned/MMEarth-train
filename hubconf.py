@@ -12,15 +12,71 @@ kwargs:
 
 import torch
 import models.convnextv2 as convnextv2
+from helpers import remap_checkpoint_keys, load_state_dict
+from timm.models.layers import trunc_normal_
 
 
-dependencies = ['torch']
+dependencies = ['torch', 'timm']
 
-def MPMAE(model_size = 'convnextv2_atto', pretrained=True, device= 'cuda', **kwargs):
+def load_custom_checkpoint(model, checkpoint, linear_probe):
+    if not linear_probe: # finetuning
+        if "unet" in model:
+            raise ValueError(
+                "All experiments were done with a combination of linear probe and fine-tuning. Please set the --linear_probe to True, to enable linear probe."
+            )
+        checkpoint_model = checkpoint["model"] if "model" in checkpoint else checkpoint
+        state_dict = model.state_dict()
+        for k in ["head.weight", "head.bias"]:
+            if (
+                k in checkpoint_model
+                and checkpoint_model[k].shape != state_dict[k].shape
+            ):
+                print(f"Removing key {k} from pretrained checkpoint")
+                del checkpoint_model[k]
+
+        # remove decoder weights
+        checkpoint_model_keys = list(checkpoint_model.keys())
+        for k in checkpoint_model_keys:
+            if "decoder" in k or "mask_token" in k or "proj" in k or "pred" in k:
+                print(f"Removing key {k} from pretrained checkpoint")
+                del checkpoint_model[k]
+
+
+        checkpoint_model = remap_checkpoint_keys(checkpoint_model)
+        load_state_dict(model, checkpoint_model)
+        # manually initialize fc layer
+        trunc_normal_(model.head.weight, std=2e-5)
+        torch.nn.init.constant_(model.head.bias, 0.)
+
+
+    elif linear_probe: # linear probe
+        # we still start with the same fine-tuning pre-trained model, and then remove the head. we then make the model frozen, and add a new head for linear probe
+
+        checkpoint_model = checkpoint["model"] if "model" in checkpoint else checkpoint
+        state_dict = model.state_dict()
+        for k in ["head.weight", "head.bias"]:
+            if (
+                k in checkpoint_model
+                and checkpoint_model[k].shape != state_dict[k].shape
+            ):
+                print(f"Removing key {k} from pretrained checkpoint")
+                del checkpoint_model[k]
+
+        # remove decoder weights
+        checkpoint_model_keys = list(checkpoint_model.keys())
+        for k in checkpoint_model_keys:
+            if "decoder" in k or "mask_token" in k or "proj" in k or "pred" in k:
+                print(f"Removing key {k} from pretrained checkpoint")
+                del checkpoint_model[k]
+
+        checkpoint_model = remap_checkpoint_keys(checkpoint_model)
+        load_state_dict(model, checkpoint_model)
+
+def MPMAE(model = 'convnextv2_atto', pretrained=True, linear_probe=True, **kwargs):
     """
     MPMAE model architecture
     """
-    model = convnextv2.__dict__[model_size](**kwargs)
+    model = convnextv2.__dict__[model](**kwargs)
     ckpt_urls = {
         'pt-all_mod_atto_1M_64_uncertainty_56-8': 'https://sid.erda.dk/share_redirect/g23YOnaaTp/pt-all_mod_atto_1M_64_uncertainty_56-8/checkpoint-199.pth',
         'pt-all_mod_atto_1M_64_unweighted_56-8': 'https://sid.erda.dk/share_redirect/g23YOnaaTp/pt-all_mod_atto_1M_64_unweighted_56-8/checkpoint-199.pth',
@@ -29,15 +85,9 @@ def MPMAE(model_size = 'convnextv2_atto', pretrained=True, device= 'cuda', **kwa
     }
 
     if pretrained:
-        if device == 'cpu':
-            state_dict = torch.hub.load_state_dict_from_url(ckpt_urls['pt-all_mod_atto_1M_64_uncertainty_56-8'], map_location='cpu')
-            model.load_state_dict(state_dict, map_location=torch.device('cpu'))
-        else:
-            if torch.cuda.is_available():
-                state_dict = torch.hub.load_state_dict_from_url(ckpt_urls['pt-all_mod_atto_1M_64_uncertainty_56-8'])
-                model.load_state_dict(state_dict)
-            else:
-                raise AssertionError("CUDA is not available. Set device='cpu' to load the model on CPU.")
+        # download the pretrained weights and get the path
+        checkpoint = torch.hub.load_state_dict_from_url(ckpt_urls[model], map_location='cpu')
+        model = load_custom_checkpoint(model, checkpoint, linear_probe)
     else:
         raise AssertionError("Loading the model with torch hub without pretrained weights is not supported.")
     return model
