@@ -86,7 +86,7 @@ def MPMAE(model = 'convnextv2_atto', pretrained=True, linear_probe=True, **kwarg
 
     if pretrained:
         # download the pretrained weights and get the path
-        checkpoint = torch.hub.load_state_dict_from_url(ckpt_urls[model], map_location='cpu')
+        checkpoint = torch.hub.load_state_dict_from_url(ckpt_urls['pt-all_mod_atto_1M_64_uncertainty_56-8'], map_location='cpu')
         model = load_custom_checkpoint(model, checkpoint, linear_probe)
     else:
         raise AssertionError("Loading the model with torch hub without pretrained weights is not supported.")
