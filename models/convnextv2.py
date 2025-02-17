@@ -69,9 +69,9 @@ class ConvNeXtV2(nn.Module):
 
     def __init__(
         self,
-        patch_size: int = 32,
-        img_size: int = 128,
-        in_chans: int = 3,
+        patch_size: int = 8,
+        img_size: int = 56,
+        in_chans: int = 12,
         num_classes: int = 1000,
         depths: list[int] = None,
         dims: list[int] = None,
