@@ -72,6 +72,8 @@ def load_custom_checkpoint(model, checkpoint, linear_probe):
         checkpoint_model = remap_checkpoint_keys(checkpoint_model)
         load_state_dict(model, checkpoint_model)
 
+    return model
+
 def MPMAE(model = 'convnextv2_atto', ckpt_name = 'pt-all_mod_atto_1M_64_uncertainty_56-8', pretrained=True, linear_probe=True, in_chans = 12, **kwargs):
     """
     MPMAE model architecture
