@@ -36,7 +36,7 @@ See [INSTALL.md](https://github.com/vishalned/MMEarth-train/blob/main/INSTALL.md
 See [TRAINING.md](https://github.com/vishalned/MMEarth-train/blob/main/TRAINING.md) for more details on training and finetuning. We recommend using those scripts to reproduce results in the paper, but we also have a simplified version using torch.hub. 
 ```
 import torch
-mmearth_model = torch.hub.load('vishalned/mmearth-train', 'MPMAE')
+mmearth_model = torch.hub.load('vishalned/mmearth-train', 'MPMAE', model_name='convnextv2_atto', pretrained=True, linear_probe=True)
 ```
 
 A full example of finetuning from torch.hub is provided [here](https://github.com/vishalned/MMEarth-train/blob/main/examples/finetune_torchhub.py).
