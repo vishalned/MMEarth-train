@@ -249,7 +249,7 @@ class ConvNeXtV2_unet(nn.Module):
             tmp = enc_features.pop()
             x = torch.cat([x, tmp], dim=1)
         x = self.upsample_layers[3](x)
-        if not self.args.use_orig_stem:
+        if not self.use_orig_stem:
             tmp = enc_features.pop()
             x = torch.cat([x, tmp], dim=1)
         x = self.initial_conv_upsample(x)
