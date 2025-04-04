@@ -14,7 +14,8 @@ This repository contains code used to create the models and results presented in
 ## 📢 Latest Updates
 :fire::fire::fire: Last Updated on 2025.02.03 :fire::fire::fire:
 
-- Added NEW_DATASET readme for instruction on adding new datasets
+- Added torch.hub integration for easier finetuning.
+- Added NEW_DATASET readme for instruction on adding new datasets.
 - Updated repository to allow for various datasets during finetuning.
 - Updated installation scripts and repository.
 - **Paper accepted to ECCV 2024 !!**
@@ -32,7 +33,13 @@ See [INSTALL.md](https://github.com/vishalned/MMEarth-train/blob/main/INSTALL.md
 
 
 ## Training 
-See [TRAINING.md](https://github.com/vishalned/MMEarth-train/blob/main/TRAINING.md) for more details on training and finetuning. 
+See [TRAINING.md](https://github.com/vishalned/MMEarth-train/blob/main/TRAINING.md) for more details on training and finetuning. We recommend using those scripts to reproduce results in the paper, but we also have a simplified version using torch.hub. 
+```
+import torch
+mmearth_model = torch.hub.load('vishalned/mmearth-train', 'MPMAE')
+```
+
+A full example of finetuning from torch.hub is provided [here](https://github.com/vishalned/MMEarth-train/blob/main/examples/finetune_torchhub.py).
 
 ## Evaluating on new custom datasets
 See [NEW_DATASET.md](https://github.com/vishalned/MMEarth-train/blob/main/NEW_DATASET.md) for more details on finetuning on custom datasets.
