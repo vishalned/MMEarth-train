@@ -74,7 +74,7 @@ def load_custom_checkpoint(model, checkpoint, linear_probe):
 
     return model
 
-def MPMAE(model_name = 'convnextv2_atto', ckpt_name = 'pt-all_mod_atto_1M_64_uncertainty_56-8', pretrained=True, linear_probe=True, in_chans = 12, **kwargs):
+def MPMAE(model_name = 'convnextv2_atto', ckpt_name = 'pt-all_mod_atto_1M_64_uncertainty_56-8', pretrained=True, linear_probe=True, **kwargs):
     """
     MPMAE model architecture
     """
