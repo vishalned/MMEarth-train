@@ -74,11 +74,11 @@ def load_custom_checkpoint(model, checkpoint, linear_probe):
 
     return model
 
-def MPMAE(model = 'convnextv2_atto', ckpt_name = 'pt-all_mod_atto_1M_64_uncertainty_56-8', pretrained=True, linear_probe=True, in_chans = 12, **kwargs):
+def MPMAE(model_name = 'convnextv2_atto', ckpt_name = 'pt-all_mod_atto_1M_64_uncertainty_56-8', pretrained=True, linear_probe=True, in_chans = 12, **kwargs):
     """
     MPMAE model architecture
     """
-    model = convnextv2.__dict__[model](**kwargs)
+    model = convnextv2.__dict__[model_name](**kwargs)
     ckpt_urls = {
         'pt-all_mod_atto_1M_64_uncertainty_56-8': 'https://sid.erda.dk/share_redirect/g23YOnaaTp/pt-all_mod_atto_1M_64_uncertainty_56-8/checkpoint-199.pth',
         'pt-all_mod_atto_1M_64_unweighted_56-8': 'https://sid.erda.dk/share_redirect/g23YOnaaTp/pt-all_mod_atto_1M_64_unweighted_56-8/checkpoint-199.pth',
