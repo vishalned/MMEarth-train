@@ -658,7 +658,7 @@ def main(args: argparse.Namespace):
             )
 
             logging_text = "Metric: "
-            for k, v in train_stats.items():
+            for k, v in test_stats.items():
                 if k != "loss":
                     logging_text += f"{k} - {v:.3f} "
                     metric_key = k
