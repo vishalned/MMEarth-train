@@ -8,7 +8,7 @@ from kornia.augmentation import RandomCrop
 from timm.models.layers import trunc_normal_
 from torch import Tensor
 
-from MODALITIES import PIXEL_WISE_MODALITIES
+from ..MODALITIES import PIXEL_WISE_MODALITIES
 from MinkowskiEngine import (
     MinkowskiConvolution,
     MinkowskiDepthwiseConvolution,
