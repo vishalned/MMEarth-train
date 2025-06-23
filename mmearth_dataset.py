@@ -186,6 +186,7 @@ def get_mmearth_dataloaders(
     no_ffcv: bool = False,
     indices: list[list[int]] = None,
     distributed: bool = False,
+    apt_split_file: str = None,
 ):
     """
     Creates and returns data loaders for the MMEarth dataset. If the processed beton file does not exist, it processes the data
@@ -249,9 +250,6 @@ def get_mmearth_dataloaders(
     """
     if splits is None:
         splits = ["train"]
-    assert not no_ffcv or (
-        no_ffcv and indices is None
-    ), "Providing indices is not supported in no_ffcv mode."
     assert indices is None or (len(indices) == len(splits)), (
         "If indices are given, the number of splits and number of list of indices"
         "must align (len(indices) != len(splits) = ({len(indices)} != {len(splits))}"
@@ -268,6 +266,8 @@ def get_mmearth_dataloaders(
         subset = "" if indices is None else "_subset"
         beton_file = processed_dir / f"{split}{subset}.beton"
         args = create_MMEearth_args(data_dir, modalities)
+        if apt_split_file is not None:
+            args.splits_path = apt_split_file
 
         if no_ffcv:
             
@@ -293,12 +293,13 @@ def get_mmearth_dataloaders(
                 beton_file,
                 num_workers=num_workers,
                 modalities=args.modalities,
-                indices=idx,
+                # indices=idx,
             )
 
         # Replaces PyTorch data loader (`torch.utils.data.Dataloader`)
         sampler = (
-            OrderOption.RANDOM if distributed else OrderOption.QUASI_RANDOM
+            # OrderOption.RANDOM if distributed else OrderOption.QUASI_RANDOM
+            OrderOption.RANDOM 
         )  # quasi random not working distributed
         sampler = sampler if is_train else OrderOption.SEQUENTIAL
         dataloader = ffcv.Loader(
@@ -308,6 +309,7 @@ def get_mmearth_dataloaders(
             order=sampler,
             drop_last=is_train,
             distributed=distributed,
+            indices=indices[i] if indices is not None else None,
         )
 
         dataloaders.append(dataloader)
