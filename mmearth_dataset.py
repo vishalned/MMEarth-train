@@ -21,7 +21,7 @@ except ImportError:
 import torch
 from torch.utils.data import Dataset
 
-import MODALITIES
+from .MODALITIES import *
 
 
 ##################### FUNCTIONS FOR PRETRAINING DATASETS #####################
