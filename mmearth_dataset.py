@@ -256,7 +256,7 @@ def get_mmearth_dataloaders(
     )
 
     if processed_dir is None:
-        processed_dir = data_dir
+        processed_dir = Path(data_dir)
     else:
         processed_dir.mkdir(exist_ok=True)
 
