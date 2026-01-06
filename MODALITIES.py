@@ -3,6 +3,7 @@
 # NOTE: THE MAIN DICT TO CHANGE IS THE INP_MODALITIES AND OUT_MODALITIES. 
 import os
 from pathlib import Path
+import numpy as np
 
 # we have the data for both l2a and l1c, so l2a has everything below except B10. l1c has everything except SCL and MSK_CLDPRB
 # sentinel2: B01, B02, B03, B04, B05, B06, B07, B08, B8A, B09, B10, B11, B12
@@ -42,11 +43,11 @@ NO_DATA_VAL = {
     "aster": float("-inf"),
     "canopy_height_eth": 255,
     "dynamic_world": 0,
-    "esa_worldcover": 255,
+    "esa_worldcover": 0,
     "lat": float("-inf"),
     "lon": float("-inf"),
     "month": float("-inf"),
-    "era5": float("inf"),
+    "era5": np.nan,
     "biome": 255,
     "eco_region": 65535,
 }

@@ -85,6 +85,34 @@ class MMEarthDataset(Dataset):
                 data = self.data_full[modality][self.indices[idx], modality_idx, ...]
                 data = np.array(data)
 
+            if modality == "dynamic_world":
+                # the labels of dynamic world are 0, 1, 2, 3, 4, 5, 6, 7, 8, 9. We convert them to 0, 1, 2, 3, 4, 5, 6, 7, 8, nan respectively.
+                # originally when downloading the no data values are 0. hence we remap them to nan.
+                data = np.where(data == MODALITIES.NO_DATA_VAL[modality], np.nan, data)
+                old_values = [1, 2, 3, 4, 5, 6, 7, 8, 9, np.nan]
+                new_values = [0, 1, 2, 3, 4, 5, 6, 7, 8, np.nan]
+                for old, new in zip(old_values, new_values):
+                    data = np.where(data == old, new, data)
+                # for any value greater than 8, we map them to nan
+                data = np.where(data > 8, np.nan, data)
+
+            if modality == "esa_worldcover":
+                # the labels of esa worldcover are 10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 100, 255. We convert them to 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 255 respectively.
+                data = np.where(data == MODALITIES.NO_DATA_VAL[modality], np.nan, data)
+                old_values = [10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 100]
+                new_values = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+                for old, new in zip(old_values, new_values):
+                    data = np.where(data == old, new, data)
+                # for any value greater than 10, we map them to nan
+                data = np.where(data > 10, np.nan, data)
+
+            # converting the nodata values to nan to keep everything consistent
+            data = (
+                np.where(data == MODALITIES.NO_DATA_VAL[modality], np.nan, data)
+                if modality != "dynamic_world"
+                else data
+            )
+
             # inside the band_stats, the name for sentinel2 is sentinel2_l1c or sentinel2_l2a
             if modality == "sentinel2":
                 modality_ = "sentinel2_l2a" if l2a else "sentinel2_l1c"
@@ -105,33 +133,6 @@ class MMEarthDataset(Dataset):
                 else:
                     # single value mean and std for each band
                     data = (data - means[:, None, None]) / stds[:, None, None]
-
-            if modality == "dynamic_world":
-                # the labels of dynamic world are 0, 1, 2, 3, 4, 5, 6, 7, 8, 9. We convert them to 0, 1, 2, 3, 4, 5, 6, 7, 8, nan respectively.
-                # originally when downloading the no data values are 0. hence we remap them to nan.
-                data = np.where(data == MODALITIES.NO_DATA_VAL[modality], np.nan, data)
-                old_values = [1, 2, 3, 4, 5, 6, 7, 8, 9, np.nan]
-                new_values = [0, 1, 2, 3, 4, 5, 6, 7, 8, np.nan]
-                for old, new in zip(old_values, new_values):
-                    data = np.where(data == old, new, data)
-                # for any value greater than 8, we map them to nan
-                data = np.where(data > 8, np.nan, data)
-
-            if modality == "esa_worldcover":
-                # the labels of esa worldcover are 10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 100, 255. We convert them to 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 255 respectively.
-                old_values = [10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 100, 255]
-                new_values = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 255]
-                for old, new in zip(old_values, new_values):
-                    data = np.where(data == old, new, data)
-                # for any value greater than 10, we map them to nan
-                data = np.where(data > 10, np.nan, data)
-
-            # converting the nodata values to nan to keep everything consistent
-            data = (
-                np.where(data == MODALITIES.NO_DATA_VAL[modality], np.nan, data)
-                if modality != "dynamic_world"
-                else data
-            )
 
             if MODALITIES.MODALITY_TASK[modality] in ["classification", "segmentation"]:
                 # remap nan values to -1
